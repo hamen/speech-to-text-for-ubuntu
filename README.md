@@ -1,12 +1,26 @@
 # Speech-to-Text For Ubuntu
 
-A simple Python project to record audio using a hotkey (such as a remapped mouse side button) and automatically and offline transcribe it to text using a speech-to-text Faster Whisper model. Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS).
+A powerful Python project that provides **push-to-talk speech recognition** using a hotkey (such as a remapped mouse side button) and automatically transcribes it to text using Faster Whisper models.
+
+**🎯 Key Features:**
+- **Push-to-talk recording** - Press and hold to record, release to process
+- **Multiple output modes** - Choose between automatic typing or clipboard + notification
+- **Beautiful interactive menu** - Easy setup and configuration with [Gum](https://github.com/charmbracelet/gum)
+- **Offline transcription** - Works without internet using local Whisper models
+- **Wayland & X11 support** - Compatible with modern Linux desktop environments
+- **Configurable models** - From fast `tiny.en` to accurate `large-v3`
+
+Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS).
 
 ## Project Overview
 
 - **key_listener.py**: Monitors a designated key (such as F16, which can be mapped to a mouse button or to any other key) to control audio recording. Recording begins when the key is pressed and ends upon release, at which point speech-to-text processing is automatically initiated.
 
-- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model.
+- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Supports multiple output modes.
+
+- **menu.sh**: Beautiful interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for easy setup, mode selection, and system management.
+
+- **run.sh**: Automated setup script that installs dependencies and launches the system.
 
 ## Requirements
 
@@ -18,6 +32,28 @@ A simple Python project to record audio using a hotkey (such as a remapped mouse
 - A speech-to-text model Faster Whisper
 
 ## Setup
+
+### Option 1: Interactive Menu (Recommended)
+
+The easiest way to get started is using the beautiful interactive menu:
+
+```bash
+# Clone the repository
+git clone https://github.com/CDNsun/speech-to-text-for-ubuntu
+cd speech-to-text-for-ubuntu
+
+# Make menu executable and run it
+chmod +x menu.sh
+./menu.sh
+```
+
+The menu will guide you through:
+1. **Installing Dependencies** - Automatically installs all required packages
+2. **Choosing Output Mode** - Select between auto-typing or clipboard + notification
+3. **Running the System** - Start in foreground or background
+4. **System Status** - Check what's running and troubleshoot issues
+
+### Option 2: Manual Setup
 
 1. **Clone the repository**
    ```bash
@@ -53,27 +89,59 @@ A simple Python project to record audio using a hotkey (such as a remapped mouse
 
 ## Usage
 
-### 1. Start the Key Listener
+### 1. Interactive Menu (Recommended)
 
-Run as root (required for input device access and sudo):
+Launch the beautiful interactive menu:
 ```bash
+./menu.sh
+```
+
+**Menu Options:**
+- **1️⃣ Install Dependencies** - One-click setup of all required packages
+- **2️⃣ Run with Auto-Typing** - Text appears automatically in focused window
+- **3️⃣ Run with Manual Pasting** - Text copied to clipboard with notification (no typing)
+- **4️⃣ Run in Background** - Start as background service
+- **5️⃣ Check System Status** - Monitor what's running and troubleshoot
+- **6️⃣ Help & Information** - Usage instructions and tips
+
+### 2. Command Line Usage
+
+**Direct commands:**
+```bash
+# Install dependencies
+./menu.sh install
+
+# Run with auto-typing
+./menu.sh type
+
+# Run with clipboard mode (no typing)
+./menu.sh clipboard
+
+# Run in background
+./menu.sh background
+
+# Check system status
+./menu.sh status
+```
+
+**Manual execution:**
+```bash
+# Run as root (required for input device access)
 sudo python3 key_listener.py
+
+# Press and hold your chosen key (e.g., F16/mouse button) to start recording
+# Release the key to stop recording and trigger speech-to-text
 ```
 
-- Press and hold your chosen key (e.g., F16/mouse button) to start recording.
-- Release the key to stop recording and trigger speech-to-text.
-
-For automatic start on boot you use crontab (for root) similar to this:
-```
-* * * * * ps -ef | grep "/home/david/Cursor/speech-to-text/key_listener.py" | grep -v grep > /dev/null || /usr/bin/python3 /home/david/Cursor/speech-to-text/key_listener.py >> /tmp/key_listener.log 2>&1 &
-```
-### 2. Quick Runner
+### 3. Quick Runner
 
 Use the included helper to start everything (installs optional deps, starts ydotoold on Wayland, launches the listener):
 
 ```bash
 bash run.sh           # foreground
 bash run.sh --daemon  # background
+bash run.sh --mode clipboard  # clipboard mode only
+bash run.sh --mode type       # auto-typing mode only
 ```
 
 If you need the `ydotoold` daemon (Wayland typing), you can build/install from source if your distro package lacks `ydotoold`:
@@ -95,18 +163,40 @@ python3 speech_to_text.py /path/to/audio.wav
 
 ## How it Works
 
+### Output Modes
+
+The system supports two distinct output modes that you can choose from:
+
+**🎯 Auto-Typing Mode (`STT_MODE=type`):**
+- Automatically types transcribed text into the focused window
+- Uses multiple fallback methods: `pyautogui` → `wtype` → `ydotool`
+- Includes root-level fallback for maximum compatibility
+
+**📋 Manual Pasting Mode (`STT_MODE=clipboard`):**
+- Copies transcribed text to clipboard
+- Sends desktop notification with text preview
+- **No automatic typing** - you control where and when to paste
+- Perfect for avoiding focus issues and unwanted text input
+
+### System Components
+
 - **key_listener.py**
   - Listens for a specific key event using `evdev`.
   - Starts `arecord` to record audio when the key is pressed.
   - Stops recording when the key is released.
   - Calls `speech_to_text.py` to transcribe the recorded audio.
-
+  - Respects `STT_MODE` environment variable for output behavior.
 
 - **speech_to_text.py**
   - Loads the recorded audio file.
   - Converts stereo audio to mono if necessary.
   - Transcribes the audio to text using a Faster Whisper model (configurable).
-  - Types into the active window using `pyautogui` (Xorg). On Wayland it tries `wtype`, then `ydotool` if available. If typing is blocked, it copies text to clipboard and shows a desktop notification.
+  - Outputs text according to selected mode (typing vs clipboard).
+
+- **menu.sh**
+  - Beautiful interactive interface powered by [Gum](https://github.com/charmbracelet/gum)
+  - Handles dependency installation, mode selection, and system management
+  - Provides system status monitoring and troubleshooting tools
 
 ## Advanced configuration (environment variables)
 
@@ -136,6 +226,24 @@ STT_MODEL=large-v3 STT_DEVICE=cuda STT_COMPUTE_TYPE=float16 STT_BEAM_SIZE=5 bash
 # Mixed-language short phrases (auto-detect, avoid over-conditioning)
 STT_MODEL=large-v3 STT_DEVICE=cuda STT_COMPUTE_TYPE=float16 STT_LANGUAGE=auto STT_CONDITION=0 STT_BEAM_SIZE=5 bash run.sh
 ```
+
+## Logging and Organization
+
+The system now organizes all logs in a dedicated `log/` directory within the project folder:
+
+```
+speech-to-text-for-ubuntu/
+├── log/                     # 📁 Log directory (gitignored)
+│   ├── key_listener.log     # 📝 Key listener activity logs
+│   └── speech_to_text.log   # 📝 Speech processing logs
+└── ...
+```
+
+**Benefits:**
+- **🧹 Clean repository** - No log files in git history
+- **📊 Organized logging** - All logs in one place
+- **🎯 Easy troubleshooting** - Clear log locations
+- **📝 Comprehensive logging** - Detailed activity tracking
 
 ## Wayland notes
 

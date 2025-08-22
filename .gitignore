@@ -1,0 +1,43 @@
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Log files
+log/
+*.log
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Audio files
+*.wav
+*.mp3
+*.flac
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific temporary files
+/tmp/recorded_audio.wav
+/tmp/speech_to_text_output.txt
+/tmp/speech_to_text_typed.ok
+/tmp/.ydotool_socket

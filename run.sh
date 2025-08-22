@@ -10,7 +10,11 @@ export YDOTOOL_SOCKET="/tmp/.ydotool_socket"
 
 usage() {
   cat <<EOF
-Usage: bash run.sh [--daemon]
+Usage: bash run.sh [--daemon] [--mode <mode>]
+
+Modes:
+  --mode clipboard    Copy text to clipboard + notification (default)
+  --mode type        Automatic typing into focused window
 
 Actions performed:
   - Ensures base system dependencies (alsa-utils, python3-evdev, wl-clipboard, libnotify-bin, wtype)
@@ -21,13 +25,45 @@ Actions performed:
 Notes:
   - This script must run as root to access /dev/input/event*. If not root, it will re-exec with sudo.
   - On Wayland, typing may require ydotoold; if not available, clipboard+notification fallback is used.
+  - Default mode is clipboard (no automatic typing) for better control and reliability.
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
+# Parse command line arguments
+STT_MODE="clipboard"  # Default mode
+DAEMON_MODE=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --daemon)
+      DAEMON_MODE=true
+      shift
+      ;;
+    --mode)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --mode requires a value (clipboard or type)"
+        exit 1
+      fi
+      STT_MODE="$2"
+      if [[ "$STT_MODE" != "clipboard" && "$STT_MODE" != "type" ]]; then
+        echo "Error: --mode must be 'clipboard' or 'type', got: $STT_MODE"
+        exit 1
+      fi
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+echo "[run.sh] STT_MODE set to: $STT_MODE"
 
 # Re-exec as root if needed
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -76,19 +112,19 @@ start_ydotoold() {
 }
 
 start_listener_fg() {
-  echo "[run.sh] Starting key listener in foreground…"
-  exec python3 "$REPO_DIR/key_listener.py"
+  echo "[run.sh] Starting key listener in foreground with STT_MODE=$STT_MODE…"
+  STT_MODE="$STT_MODE" exec python3 "$REPO_DIR/key_listener.py"
 }
 
 start_listener_bg() {
-  echo "[run.sh] Starting key listener in background… logs: /tmp/key_listener.log"
-  nohup python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
+  echo "[run.sh] Starting key listener in background with STT_MODE=$STT_MODE… logs: /tmp/key_listener.log"
+  STT_MODE="$STT_MODE" nohup python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
 }
 
 # Start services
 start_ydotoold
 
-if [[ "${1:-}" == "--daemon" ]]; then
+if [[ "$DAEMON_MODE" == true ]]; then
   start_listener_bg
 else
   start_listener_fg

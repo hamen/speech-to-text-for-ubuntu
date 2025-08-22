@@ -43,12 +43,16 @@ import shutil
 
 
 # Setup logging
+REPO_DIR = os.path.dirname(os.path.realpath(__file__))
+log_file = os.path.join(REPO_DIR, 'log', 'key_listener.log')
+# Ensure log directory exists
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s: %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/tmp/key_listener.log')
+        logging.FileHandler(log_file)
     ]
 )
 
@@ -66,9 +70,6 @@ DEVICE_PATH = "/dev/input/event12"
 
 # Just a temporary file to store the audio.
 AUDIO_FILE = "/tmp/recorded_audio.wav"
-
-# Resolve important paths and user dynamically based on the current system
-REPO_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def _detect_foreground_user() -> str:
     """Detect the desktop user when running with elevated privileges.
@@ -411,7 +412,11 @@ def main():
                             ], env=env, check=True, preexec_fn=demote_stt)
 
                             # If ydotool exists but could not type as a user, try typing as root using the file output
-                            if shutil.which("ydotool") and os.path.exists("/tmp/speech_to_text_output.txt"):
+                            # But only if we're in "type" mode, not "clipboard" mode
+                            stt_mode = env.get("STT_MODE", "clipboard").lower()
+                            if (stt_mode == "type" and
+                                shutil.which("ydotool") and
+                                os.path.exists("/tmp/speech_to_text_output.txt")):
                                 text = None
                                 try:
                                     with open("/tmp/speech_to_text_output.txt", "r", encoding="utf-8") as f:
@@ -423,7 +428,9 @@ def main():
                                 if text and not already_typed:
                                     try:
                                         # Some compositors need a small delay before typing
+                                        logging.info(f"Attempting root ydotool fallback typing for: {text[:50]}...")
                                         subprocess.run(["ydotool", "type", text + " "], check=True)
+                                        logging.info("Root ydotool typing succeeded")
                                     except Exception as e:
                                         logging.warning(f"Root ydotool typing failed: {e}")
                                 # Clean the marker file for next run
@@ -432,6 +439,8 @@ def main():
                                         os.remove("/tmp/speech_to_text_typed.ok")
                                 except Exception:
                                     pass
+                            elif stt_mode == "clipboard":
+                                logging.info("Skipping root ydotool fallback (clipboard mode)")
                         except subprocess.CalledProcessError as e:
                             logging.error(f"Speech-to-text failed with exit code {e.returncode}")
                         except Exception as e:

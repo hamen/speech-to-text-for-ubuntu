@@ -24,12 +24,16 @@ TYPE_SUCCESS_FILE = "/tmp/speech_to_text_typed.ok"
 
 
 # Setup logging
+REPO_DIR = os.path.dirname(os.path.realpath(__file__))
+log_file = os.path.join(REPO_DIR, 'log', 'speech_to_text.log')
+# Ensure log directory exists
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s: %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/tmp/speech_to_text.log')
+        logging.FileHandler(log_file)
     ]
 )
 
@@ -137,12 +141,6 @@ def _type_with_ydotool(text: str) -> bool:
     if not shutil.which("ydotool"):
         return False
 
-def _mark_type_success() -> None:
-    try:
-        with open(TYPE_SUCCESS_FILE, "w", encoding="utf-8"):
-            pass
-    except Exception:
-        pass
     # ydotool usually requires root unless ydotoold is running
     is_root = False
     try:
@@ -164,6 +162,132 @@ def _mark_type_success() -> None:
     except Exception as e:
         logging.error(f"ydotool failed: {e}")
         return False
+
+def _mark_type_success() -> None:
+    """Mark that typing/pasting was successful to prevent duplicate actions."""
+    try:
+        with open(TYPE_SUCCESS_FILE, "w", encoding="utf-8"):
+            pass
+    except Exception:
+        pass
+
+def _paste_with_pyautogui() -> bool:
+    """Try to paste using pyautogui (X11). Returns True if succeeded."""
+    try:
+        import pyautogui  # Lazy import to avoid X display issues on Wayland
+        logging.info("Attempting pyautogui paste with Ctrl+V")
+        pyautogui.hotkey('ctrl', 'v')
+        logging.info("pyautogui paste succeeded")
+        return True
+    except Exception as e:
+        logging.warning(f"pyautogui paste failed: {e}")
+        return False
+
+def _paste_with_ydotool() -> bool:
+    """Try to paste using ydotool (Wayland). Returns True if succeeded."""
+    if not shutil.which("ydotool"):
+        logging.info("ydotool not found in PATH")
+        return False
+
+    # Check if ydotoold is running
+    ydotoold_running = False
+    try:
+        subprocess.check_call(["pgrep", "-x", "ydotoold"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ydotoold_running = True
+        logging.info("ydotoold is running")
+    except Exception as e:
+        logging.info(f"ydotoold check failed: {e}")
+        pass
+
+    # Set YDOTOOL_SOCKET environment variable
+    env = os.environ.copy()
+    env['YDOTOOL_SOCKET'] = '/tmp/.ydotool_socket'
+    logging.info(f"Set YDOTOOL_SOCKET to {env['YDOTOOL_SOCKET']}")
+
+    # Try multiple paste approaches with correct ydotool syntax
+    paste_attempts = [
+        (["ctrl", "v"], "Ctrl+V key combination"),
+        (["ctrl", "shift", "v"], "Ctrl+Shift+V key combination"),
+        (["ctrl", "insert"], "Ctrl+Insert key combination"),
+        (["shift", "insert"], "Shift+Insert key combination"),
+    ]
+
+    for keys, description in paste_attempts:
+        try:
+            logging.info(f"Attempting ydotool {description}")
+            result = subprocess.run(["ydotool", "key"] + keys, env=env, check=True, capture_output=True, text=True)
+            logging.info(f"ydotool {description} succeeded (user mode)")
+            return True
+        except Exception as e:
+            logging.warning(f"ydotool {description} failed (user mode): {e}")
+            continue
+
+    # If no ydotoold, try running ydotool with sudo (requires sudoers config)
+    for keys, description in paste_attempts:
+        try:
+            logging.info(f"Attempting ydotool {description} (sudo mode)")
+            result = subprocess.run(["sudo", "ydotool", "key"] + keys, env=env, check=True, capture_output=True, text=True)
+            logging.info(f"sudo ydotool {description} succeeded (sudo mode)")
+            return True
+        except Exception as e:
+            logging.warning(f"sudo ydotool {description} failed: {e}")
+            continue
+
+    logging.info("ydotool fallback exhausted")
+    return False
+
+def _paste_with_wtype() -> bool:
+    """Try to paste using wtype (Wayland). Returns True if succeeded."""
+    if not shutil.which("wtype"):
+        logging.info("wtype not found in PATH")
+        return False
+
+    try:
+        logging.info("Attempting wtype paste with Ctrl+V")
+        # wtype syntax: press ctrl, press v, release ctrl
+        subprocess.run(["wtype", "-M", "ctrl", "-P", "v", "-m", "ctrl"], check=True)
+        logging.info("wtype paste succeeded")
+        return True
+    except Exception as e:
+        logging.error(f"wtype paste failed: {e}")
+        return False
+
+def _type_with_ydotool_direct(text: str) -> bool:
+    """Try to type text directly using ydotool (Wayland). Returns True if succeeded."""
+    if not shutil.which("ydotool"):
+        logging.info("ydotool not found in PATH")
+        return False
+
+    # Set YDOTOOL_SOCKET environment variable
+    env = os.environ.copy()
+    env['YDOTOOL_SOCKET'] = '/tmp/.ydotool_socket'
+    logging.info(f"Set YDOTOOL_SOCKET to {env['YDOTOOL_SOCKET']}")
+
+    try:
+        logging.info("Attempting ydotool direct type")
+        subprocess.run(["ydotool", "type", text], env=env, check=True, capture_output=True, text=True)
+        logging.info("ydotool direct type succeeded")
+        return True
+    except Exception as e:
+        logging.warning(f"ydotool direct type failed: {e}")
+        return False
+
+def paste_text(text: str) -> bool:
+    """Copy text to clipboard and notify user to paste manually. Returns True if succeeded."""
+    logging.info(f"Starting paste_text function for text: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+
+    # Copy text to clipboard
+    if not _copy_to_clipboard(text):
+        logging.error("Failed to copy text to clipboard")
+        return False
+
+    logging.info("Text copied to clipboard successfully")
+
+    # Send notification that text is ready to paste
+    _notify("Speech-to-Text Complete", f"Text copied to clipboard. Press Ctrl+V to paste.\n\nPreview: {text[:100]}{'...' if len(text) > 100 else ''}")
+
+    logging.info("Clipboard + notification method completed successfully")
+    return True
 
 def type_text(text):
     """Type text using pyautogui (imported lazily), falling back to wtype on Wayland."""
@@ -252,13 +376,24 @@ def main():
     # Always write to output file for downstream consumers (e.g., root ydotool typer)
     write_output_file(full_text)
 
-    # Optionally type (skip if instructed by environment)
-    if os.environ.get("STT_NO_TYPE"):
-        logging.info("Skipping typing (STT_NO_TYPE set)")
-        return
+    # Check output mode from environment variable
+    stt_mode = os.environ.get("STT_MODE", "clipboard").lower()
+    logging.info(f"STT_MODE set to: {stt_mode}")
 
-    # Type results
-    type_text(full_text)
+    if stt_mode == "type":
+        # Automatic typing mode
+        logging.info("Using automatic typing mode")
+        if not paste_text(full_text):
+            # Fallback to old typing method if paste fails
+            logging.info("Automatic paste failed, falling back to typing method")
+            type_text(full_text)
+    elif stt_mode == "clipboard":
+        # Clipboard + notification mode (no automatic typing)
+        logging.info("Using clipboard + notification mode")
+        paste_text(full_text)
+    else:
+        logging.warning(f"Unknown STT_MODE: {stt_mode}, defaulting to clipboard mode")
+        paste_text(full_text)
 
     logging.info("Processing completed")
 
