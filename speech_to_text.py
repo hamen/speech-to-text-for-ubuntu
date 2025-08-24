@@ -32,6 +32,11 @@ STT_FIX_PUNCTUATION = os.environ.get("STT_FIX_PUNCTUATION", "1").lower() in ("1"
 STT_AGGRESSIVE_CLEANING = os.environ.get("STT_AGGRESSIVE_CLEANING", "0").lower() in ("1", "true", "yes")
 STT_PRESERVE_COMMON_WORDS = os.environ.get("STT_PRESERVE_COMMON_WORDS", "1").lower() in ("1", "true", "yes")
 
+# Sound notification configuration
+STT_USE_SOUND = os.environ.get("STT_USE_SOUND", "1").lower() in ("1", "true", "yes")
+STT_SOUND_FILE = os.environ.get("STT_SOUND_FILE", "/usr/share/sounds/freedesktop/stereo/complete.oga")
+STT_USE_NOTIFICATION = os.environ.get("STT_USE_NOTIFICATION", "0").lower() in ("1", "true", "yes")
+
 
 # Setup logging
 REPO_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -397,7 +402,7 @@ def paste_text(text: str) -> bool:
     logging.info("Text copied to clipboard successfully")
 
     # Send notification that text is ready to paste
-    _notify("Speech-to-Text Complete", f"Text copied to clipboard. Press Ctrl+V to paste.\n\nPreview: {text[:100]}{'...' if len(text) > 100 else ''}")
+    _notify_user("Speech-to-Text Complete", f"Text copied to clipboard. Press Ctrl+V to paste.\n\nPreview: {text[:100]}{'...' if len(text) > 100 else ''}")
 
     logging.info("Clipboard + notification method completed successfully")
     return True
@@ -407,7 +412,7 @@ def type_text(text):
     # On GNOME Wayland, simulated typing is often blocked. Ensure clipboard is set first.
     if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland" and "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", ""):
         if _copy_to_clipboard(text + " "):
-            _notify("Speech-to-Text", "Transcription copied. Press Ctrl+V to paste.")
+            _notify_user("Speech-to-Text", "Transcription copied. Press Ctrl+V to paste.")
     try:
         import pyautogui  # Lazy import to avoid X display issues on Wayland during module import
         logging.info(f"Typing: {text}")
@@ -422,7 +427,7 @@ def type_text(text):
         return
     # Final fallback: put text in clipboard and notify the user to paste
     if _copy_to_clipboard(text + " "):
-        _notify("Speech-to-Text", "Text copied to clipboard. Press Ctrl+V to paste.")
+        _notify_user("Speech-to-Text", "Text copied to clipboard. Press Ctrl+V to paste.")
         return
     logging.error("No available method to type text. Install 'wtype' on Wayland or use an Xorg session.")
 
@@ -450,6 +455,36 @@ def _notify(title: str, message: str) -> None:
         subprocess.run(["notify-send", title, message], check=False)
     except Exception:
         pass
+
+def _play_sound(sound_file: str = STT_SOUND_FILE) -> None:
+    """Play a sound notification using available audio utilities."""
+    try:
+        # Try PulseAudio first (most common on modern Linux)
+        if shutil.which("paplay"):
+            subprocess.run(["paplay", sound_file], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logging.info(f"Sound notification played using paplay: {sound_file}")
+            return
+        # Fallback to ALSA
+        elif shutil.which("aplay"):
+            subprocess.run(["aplay", sound_file], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logging.info(f"Sound notification played using aplay: {sound_file}")
+            return
+        # Final fallback to speaker-test (generates a beep)
+        elif shutil.which("speaker-test"):
+            subprocess.run(["speaker-test", "-t", "sine", "-f", "1000", "-l", "1"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logging.info("Sound notification played using speaker-test (beep)")
+            return
+        else:
+            logging.warning("No audio utilities found for sound notification")
+    except Exception as e:
+        logging.warning(f"Failed to play sound notification: {e}")
+
+def _notify_user(title: str, message: str) -> None:
+    """Notify user using sound (default) or notification based on configuration."""
+    if STT_USE_SOUND:
+        _play_sound()
+    if STT_USE_NOTIFICATION:
+        _notify(title, message)
 
 def write_output_file(text: str, path: str = OUTPUT_FILE) -> None:
     try:

@@ -23,10 +23,11 @@
 ### Core Scripts
 - **`key_listener.py`** - Main orchestrator: listens for hotkey, records audio, calls speech processing
 - **`speech_to_text.py`** - Audio processor: loads audio, transcribes with Whisper, handles output modes, applies intelligent text cleaning
-- **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management, includes dedicated large-v3 GPU configuration
+- **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management, includes dedicated large-v3 GPU configuration and configuration management
 - **`run.sh`** - Automated setup script for dependencies and system launch with GPU optimization
-- **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription
+- **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription, loads persistent user preferences
 - **`launch-large-v3.sh`** - One-command launcher for large-v3 GPU configuration
+- **`config-manager.sh`** - Comprehensive configuration management with persistent storage and interactive menu
 
 ### Configuration & Logs
 - **`log/`** - Dedicated directory for all system logs (gitignored)
@@ -43,6 +44,9 @@
 - **GPU Model**: large-v3 (best quality, ~3GB VRAM usage)
 - **GPU Device**: cuda (GPU acceleration)
 - **Text Cleaning**: Conservative mode (preserves meaningful content)
+- **Configuration File**: `~/.config/speech-to-text/config.conf`
+- **Sound Notifications**: Enabled by default (completion sound)
+- **Desktop Notifications**: Disabled by default
 
 ## Running Instructions
 
@@ -55,6 +59,7 @@ chmod +x menu.sh
 **New Menu Options:**
 - **4️⃣ 🚀 Run Large-v3 GPU (Recommended)** - Best quality with GPU acceleration and text cleaning
 - **7️⃣ 🧪 Test Large-v3 Configuration** - Verify GPU setup and model loading
+- **8️⃣ ⚙️ Configuration Management** - Manage sound vs notifications, text cleaning, and model settings
 
 ### Direct Commands
 ```bash
@@ -78,6 +83,9 @@ chmod +x menu.sh
 
 # Test large-v3 configuration
 ./menu.sh test-large-v3
+
+# Open configuration management
+./menu.sh config
 ```
 
 ### Manual Execution
@@ -113,6 +121,11 @@ python3 speech_to_text.py <audio_file>
 - `STT_MIN_SENTENCE_WORDS` (default: `2`) - Minimum words required for a sentence to be kept
 - `STT_AGGRESSIVE_CLEANING` (default: `0`) - Conservative vs aggressive cleaning mode (0 = conservative, 1 = aggressive)
 - `STT_PRESERVE_COMMON_WORDS` (default: `1`) - Preserve meaningful words like "okay", "well", "now"
+
+### Sound Notification Configuration
+- `STT_USE_SOUND` (default: `1`) - Enable sound notification when transcription is complete
+- `STT_SOUND_FILE` (default: `/usr/share/sounds/freedesktop/stereo/complete.oga`) - Path to completion sound file
+- `STT_USE_NOTIFICATION` (default: `0`) - Enable desktop notifications (disabled by default)
 
 ### Example Usage
 ```bash
@@ -216,6 +229,8 @@ The system is optimized for your **NVIDIA GeForce RTX 4070** with **12GB VRAM** 
 - **`test-large-v3.sh`** - Comprehensive large-v3 testing
 - **`download-models.sh`** - Download and test all available models
 - **`switch-model.sh`** - Easy model switching for testing
+- **`test-sound.sh`** - Sound notification testing
+- **`config-manager.sh`** - Persistent configuration management
 
 ## Text Cleaning Features
 
@@ -277,8 +292,34 @@ Raw: "um I I I think that um you know the the the thing is basically um actually
 Clean: "I think that the thing is."
 ```
 
+## Configuration Management System
+
+The system now includes a comprehensive configuration management system that persists user preferences:
+
+### **⚙️ Configuration Features**
+- **Persistent Storage**: Settings saved to `~/.config/speech-to-text/config.conf`
+- **Interactive Menu**: Beautiful configuration interface integrated into main menu
+- **Sound vs Notifications**: Choose between audio feedback, desktop notifications, or both
+- **Text Cleaning Presets**: Conservative vs aggressive cleaning modes
+- **Model & Performance**: Easy switching between models, devices, and settings
+- **Real-time Updates**: Changes applied immediately and persisted
+
+### **🔧 Configuration Options**
+- **Sound Notifications**: Audio feedback when transcription complete (default: enabled)
+- **Desktop Notifications**: Traditional notification popups (default: disabled)
+- **Text Cleaning Modes**: Conservative (preserves meaningful content) vs aggressive
+- **Model Selection**: Switch between tiny.en, base.en, small.en, medium.en, large-v3
+- **Device Selection**: Choose between cuda (GPU), cpu, or auto
+- **Beam Size**: Adjust accuracy vs speed trade-offs
+- **Output Mode**: Clipboard (manual pasting) vs type (auto-typing)
+
+### **📁 Configuration Files**
+- **`config-manager.sh`** - Main configuration management script
+- **`~/.config/speech-to-text/config.conf`** - Persistent user preferences
+- **Configuration Integration**: All config files now load persistent settings with fallbacks
+
 ## Future Ideas
-- **Model Switching**: Runtime model selection via menu
+- **Model Switching**: Runtime model selection via menu ✅ **IMPLEMENTED**
 - **Hotkey Customization**: Configurable key bindings
 - **Audio Quality**: Configurable sample rate and format
 - **Language Detection**: Automatic language identification
@@ -320,6 +361,14 @@ source large-v3-config.sh        # Load large-v3 configuration
 
 # Text cleaning testing
 ./test-text-cleaning.sh          # Test conservative vs aggressive cleaning
+
+# Sound notification testing
+./test-sound.sh                  # Test sound notification system
+
+# Configuration management
+./config-manager.sh menu         # Open configuration menu
+./config-manager.sh show         # Show current configuration
+./config-manager.sh init         # Initialize configuration file
 
 # Model management
 ./download-models.sh             # Download and test all models

@@ -200,7 +200,8 @@ The system supports two distinct output modes that you can choose from:
 
 **📋 Manual Pasting Mode (`STT_MODE=clipboard`):**
 - Copies transcribed text to clipboard
-- Sends desktop notification with text preview
+- **Plays completion sound** when ready to paste (default)
+- Optional desktop notification with text preview
 - **No automatic typing** - you control where and when to paste
 - Perfect for avoiding focus issues and unwanted text input
 
@@ -283,6 +284,11 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 ### Output Mode
 - `STT_MODE` (default: `clipboard`) - Choose between `type` (auto-typing) or `clipboard` (manual pasting)
 
+### Sound Notification Configuration
+- `STT_USE_SOUND` (default: `1`) - Enable sound notification when transcription is complete
+- `STT_SOUND_FILE` (default: `/usr/share/sounds/freedesktop/stereo/complete.oga`) - Path to completion sound file
+- `STT_USE_NOTIFICATION` (default: `0`) - Enable desktop notifications (disabled by default)
+
 Examples:
 
 ```bash
@@ -294,6 +300,12 @@ STT_AGGRESSIVE_CLEANING=0 STT_PRESERVE_COMMON_WORDS=1 bash run.sh
 
 # Aggressive text cleaning
 STT_AGGRESSIVE_CLEANING=1 bash run.sh
+
+# Sound notification only (no desktop notifications)
+STT_USE_SOUND=1 STT_USE_NOTIFICATION=0 bash run.sh
+
+# Custom completion sound
+STT_SOUND_FILE="/usr/share/sounds/freedesktop/stereo/bell.oga" bash run.sh
 
 # Mixed-language short phrases
 STT_MODEL=large-v3 STT_DEVICE=cuda STT_COMPUTE_TYPE=float16 STT_LANGUAGE=auto STT_CONDITION=0 STT_BEAM_SIZE=5 bash run.sh
@@ -338,7 +350,8 @@ speech-to-text-for-ubuntu/
 ├── test-gpu.sh              # 🔥 GPU testing
 ├── download-models.sh       # 📥 Model downloader
 ├── switch-model.sh          # 🔄 Model switcher
-└── test-text-cleaning.sh    # 🧹 Text cleaning testing
+├── test-text-cleaning.sh    # 🧹 Text cleaning testing
+└── test-sound.sh            # 🔊 Sound notification testing
 ```
 
 **Benefits:**
@@ -348,6 +361,7 @@ speech-to-text-for-ubuntu/
 - **📝 Comprehensive logging** - Detailed activity tracking
 - **🚀 GPU optimization** - Dedicated GPU configuration files
 - **🧹 Text cleaning** - Intelligent speech artifact removal
+- **🔊 Sound notifications** - Audio feedback instead of desktop notifications
 
 ## Wayland notes
 

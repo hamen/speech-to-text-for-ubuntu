@@ -3,68 +3,81 @@
 # GPU-Optimized Configuration for Speech-to-Text
 # Optimized for NVIDIA RTX 4070 (12GB VRAM)
 
-# =============================================================================
-# WHISPER MODEL CONFIGURATION
-# =============================================================================
+set -e
 
-# Model Selection (choose one)
-# Uncomment your preferred model:
-
-# 🏆 BEST QUALITY (Recommended for RTX 4070)
-export STT_MODEL="large-v3"           # Best accuracy, ~3GB VRAM usage
-                                      # Excellent for professional use, high accuracy
-                                      # Good balance of quality and speed
-
-# 🚀 BALANCED OPTIONS
-# export STT_MODEL="large-v2"        # Alternative to large-v3, ~3GB VRAM
-# export STT_MODEL="large"           # Original large model, ~3GB VRAM
-# export STT_MODEL="medium.en"       # Good balance, ~1.5GB VRAM usage
-                                      # Faster than large models, still good quality
-                                      # Great for real-time applications
-
-# ⚡ SPEED OPTIMIZED
-# export STT_MODEL="small.en"        # Fast, ~0.5GB VRAM usage
-                                      # Good for real-time, decent quality
-# export STT_MODEL="base.en"         # Very fast, ~0.25GB VRAM usage
-                                      # Fastest, basic quality
-# export STT_MODEL="tiny.en"         # Fastest, ~0.1GB VRAM usage
-                                      # Fastest, basic quality, good for testing
-
-# GPU Configuration
-export STT_DEVICE="cuda"              # Use CUDA GPU acceleration
-export STT_COMPUTE_TYPE="float16"     # Optimal for RTX 4070 (good accuracy + speed)
-                                      # Alternative: "float32" for maximum precision (slower)
-
-# Quality vs Speed Trade-offs
-export STT_BEAM_SIZE="5"              # Higher = better accuracy, slower (1-5 recommended)
-                                      # 1 = fastest, 5 = best accuracy
-export STT_TEMPERATURE="0.0"          # 0.0 = deterministic, higher = more creative
-export STT_VAD="1"                    # Voice Activity Detection (1 = enabled)
-export STT_CONDITION="1"              # Text conditioning (1 = enabled)
-export STT_LANGUAGE="en"              # Language hint for transcription
+# Load persistent configuration if available
+if [[ -f "$HOME/.config/speech-to-text/config.conf" ]]; then
+    echo "📁 Loading persistent configuration..."
+    source "$HOME/.config/speech-to-text/config.conf"
+    echo "✅ Persistent configuration loaded"
+else
+    echo "📁 No persistent configuration found, using defaults"
+fi
 
 # =============================================================================
-# TEXT CLEANING CONFIGURATION
+# MODEL SELECTION (with fallback to defaults if not in persistent config)
 # =============================================================================
 
-# Enable/Disable Text Cleaning
-export STT_CLEAN_TEXT="1"             # 1 = enabled, 0 = disabled
-
-# Cleaning Options
-export STT_REMOVE_FILLERS="1"         # Remove "um", "uh", "you know" (conservative)
-export STT_FIX_REPETITIONS="1"        # Fix stuttering and word repetitions
-export STT_FIX_PUNCTUATION="1"        # Clean up excessive punctuation
-export STT_MIN_SENTENCE_WORDS="2"     # Minimum words for a sentence to be kept
-export STT_AGGRESSIVE_CLEANING="0"    # 0 = conservative, 1 = aggressive
-export STT_PRESERVE_COMMON_WORDS="1"  # Preserve meaningful words like "okay", "well"
+# Available models (choose one):
+export STT_MODEL="${STT_MODEL:-large-v3}"                    # Best quality (3GB VRAM)
+# export STT_MODEL="medium.en"                               # Balanced (1.5GB VRAM)
+# export STT_MODEL="small.en"                                # Fast (500MB VRAM)
+# export STT_MODEL="base.en"                                 # Faster (150MB VRAM)
+# export STT_MODEL="tiny.en"                                 # Fastest (40MB VRAM)
 
 # =============================================================================
-# OUTPUT MODE
+# GPU CONFIGURATION (with fallback to defaults if not in persistent config)
 # =============================================================================
 
-export STT_MODE="clipboard"           # "clipboard" or "type"
-                                      # clipboard = copy to clipboard + notification
-                                      # type = automatic typing (may be blocked on Wayland)
+export STT_DEVICE="${STT_DEVICE:-cuda}"                      # cuda, cpu, auto
+export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"        # float16 (GPU), int8 (CPU)
+export STT_BEAM_SIZE="${STT_BEAM_SIZE:-5}"                    # Higher = better accuracy, slower
+export STT_TEMPERATURE="${STT_TEMPERATURE:-0.0}"              # 0.0 = deterministic, higher = creative
+export STT_VAD="${STT_VAD:-1}"                               # Voice Activity Detection
+export STT_CONDITION="${STT_CONDITION:-1}"                    # Text conditioning
+export STT_LANGUAGE="${STT_LANGUAGE:-en}"                     # Language hint
+
+# =============================================================================
+# QUALITY VS SPEED TRADEOFFS (with fallback to defaults if not in persistent config)
+# =============================================================================
+
+# High Quality (slower):
+# export STT_MODEL="large-v3"
+# export STT_BEAM_SIZE="5"
+# export STT_COMPUTE_TYPE="float16"
+
+# Balanced (medium):
+# export STT_MODEL="medium.en"
+# export STT_BEAM_SIZE="3"
+# export STT_COMPUTE_TYPE="float16"
+
+# Fast (lower quality):
+# export STT_MODEL="small.en"
+# export STT_BEAM_SIZE="1"
+# export STT_COMPUTE_TYPE="int8"
+
+# =============================================================================
+# TEXT CLEANING (with fallback to defaults if not in persistent config)
+# =============================================================================
+
+export STT_CLEAN_TEXT="${STT_CLEAN_TEXT:-1}"                  # Enable text cleaning
+export STT_REMOVE_FILLERS="${STT_REMOVE_FILLERS:-1}"          # Remove filler words
+export STT_FIX_REPETITIONS="${STT_FIX_REPETITIONS:-1}"        # Fix stuttering
+export STT_FIX_PUNCTUATION="${STT_FIX_PUNCTUATION:-1}"        # Clean punctuation
+export STT_MIN_SENTENCE_WORDS="${STT_MIN_SENTENCE_WORDS:-2}"  # Min sentence length
+export STT_AGGRESSIVE_CLEANING="${STT_AGGRESSIVE_CLEANING:-0}" # 0 = conservative, 1 = aggressive
+export STT_PRESERVE_COMMON_WORDS="${STT_PRESERVE_COMMON_WORDS:-1}" # Preserve meaningful words
+
+# =============================================================================
+# OUTPUT MODE (with fallback to defaults if not in persistent config)
+# =============================================================================
+
+export STT_MODE="${STT_MODE:-clipboard}"                      # type = automatic typing (may be blocked on Wayland)
+
+# Sound Notification (replaces desktop notifications)
+export STT_USE_SOUND="${STT_USE_SOUND:-1}"                    # Enable sound notification (default)
+export STT_SOUND_FILE="${STT_SOUND_FILE:-/usr/share/sounds/freedesktop/stereo/complete.oga}"  # Completion sound
+export STT_USE_NOTIFICATION="${STT_USE_NOTIFICATION:-0}"             # Disable desktop notifications by default
 
 # =============================================================================
 # PERFORMANCE TUNING FOR RTX 4070

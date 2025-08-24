@@ -363,6 +363,21 @@ test_large_v3() {
     fi
 }
 
+manage_configuration() {
+    show_subtitle "Configuration Management"
+    show_info "Manage your speech-to-text preferences including sound vs notifications, text cleaning, and model settings."
+
+    if gum confirm "Open configuration management menu?"; then
+        # Load current configuration and open the interactive menu
+        if [[ -f "./config-manager.sh" ]]; then
+            ./config-manager.sh menu
+        else
+            show_error "Configuration manager not found: ./config-manager.sh"
+            echo "Please ensure the configuration manager script exists."
+        fi
+    fi
+}
+
 show_help() {
     show_subtitle "Help & Information"
 
@@ -409,8 +424,9 @@ main_menu() {
             "5️⃣ Run in Background" \
             "6️⃣ Check System Status" \
             "7️⃣ 🧪 Test Large-v3 Configuration" \
-            "8️⃣ Help & Information" \
-            "9️⃣ Exit")
+            "8️⃣ ⚙️  Configuration Management" \
+            "9️⃣ Help & Information" \
+            "🔟 Exit")
 
         case "$choice" in
             "1️⃣ Install Dependencies")
@@ -434,10 +450,13 @@ main_menu() {
             "7️⃣ 🧪 Test Large-v3 Configuration")
                 test_large_v3
                 ;;
-            "8️⃣ Help & Information")
+            "8️⃣ ⚙️  Configuration Management")
+                manage_configuration
+                ;;
+            "9️⃣ Help & Information")
                 show_help
                 ;;
-            "9️⃣ Exit")
+            "🔟 Exit")
                 echo "👋 Goodbye!"
                 exit 0
                 ;;
