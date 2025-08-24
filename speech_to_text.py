@@ -18,9 +18,19 @@ import pwd
 import shutil
 import subprocess
 import shlex
+import re
 
 OUTPUT_FILE = "/tmp/speech_to_text_output.txt"
 TYPE_SUCCESS_FILE = "/tmp/speech_to_text_typed.ok"
+
+# Text cleaning configuration
+STT_CLEAN_TEXT = os.environ.get("STT_CLEAN_TEXT", "1").lower() in ("1", "true", "yes")
+STT_MIN_SENTENCE_WORDS = int(os.environ.get("STT_MIN_SENTENCE_WORDS", "2"))
+STT_REMOVE_FILLERS = os.environ.get("STT_REMOVE_FILLERS", "1").lower() in ("1", "true", "yes")
+STT_FIX_REPETITIONS = os.environ.get("STT_FIX_REPETITIONS", "1").lower() in ("1", "true", "yes")
+STT_FIX_PUNCTUATION = os.environ.get("STT_FIX_PUNCTUATION", "1").lower() in ("1", "true", "yes")
+STT_AGGRESSIVE_CLEANING = os.environ.get("STT_AGGRESSIVE_CLEANING", "0").lower() in ("1", "true", "yes")
+STT_PRESERVE_COMMON_WORDS = os.environ.get("STT_PRESERVE_COMMON_WORDS", "1").lower() in ("1", "true", "yes")
 
 
 # Setup logging
@@ -45,6 +55,109 @@ except ImportError as e:
     print(f"Error: Required library not found: {e}")
     print("Install in your venv with: pip install numpy pyautogui soundfile faster-whisper")
     sys.exit(1)
+
+def clean_transcribed_text(text: str) -> str:
+    """
+    Clean up transcribed text by removing speech artifacts and improving readability.
+
+    Handles:
+    - Filler words and sounds (um, uh, you know, like)
+    - Repetitions (I I I think)
+    - Stuttering (I-I-I think)
+    - False starts and incomplete thoughts
+    - Excessive punctuation
+    - Sentence structure improvements
+    """
+    if not text:
+        return text
+
+    logging.info(f"Original text: {text}")
+
+    # Step 1: Remove only obvious filler sounds (not meaningful words)
+    if STT_REMOVE_FILLERS:
+        if STT_AGGRESSIVE_CLEANING:
+            # Aggressive mode: remove more filler words
+            filler_patterns = [
+                r'\b(um|uh|er|ah|hmm|huh)\b',  # Basic filler sounds
+                r'\b(you know|you see|like|basically|actually|literally)\b',  # Common filler phrases
+                r'\b(i mean|sort of|kind of|right|okay|well)\b',  # More filler phrases
+            ]
+        else:
+            # Conservative mode: only remove obvious speech sounds
+            filler_patterns = [
+                r'\b(um|uh|er|ah|hmm|huh)\b',  # Basic filler sounds only
+                r'\b(you know|you see)\b',      # Very common filler phrases only
+            ]
+
+        for pattern in filler_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+    # Step 2: Fix stuttering (repeated letters with hyphens)
+    if STT_FIX_REPETITIONS:
+        text = re.sub(r'\b(\w+)-\1\b', r'\1', text, flags=re.IGNORECASE)
+
+        # Step 3: Fix obvious word repetitions (I I I think -> I think)
+        text = re.sub(r'\b(\w+)(\s+\1){2,}\b', r'\1', text, flags=re.IGNORECASE)
+
+        # Step 4: Fix obvious phrase repetitions (the the the thing -> the thing)
+        text = re.sub(r'\b(\w+\s+\w+)(\s+\1){2,}\b', r'\1', text, flags=re.IGNORECASE)
+
+    # Step 5: Clean up excessive punctuation
+    if STT_FIX_PUNCTUATION:
+        text = re.sub(r'[.!?]{2,}', '.', text)  # Multiple periods/exclamation/question marks
+        text = re.sub(r'[,]{2,}', ',', text)     # Multiple commas
+        text = re.sub(r'[-]{2,}', '-', text)     # Multiple hyphens
+
+    # Step 6: Intelligent sentence structure improvement
+    # Split by sentence endings but be more careful
+    sentences = re.split(r'[.!?]+', text)
+    cleaned_sentences = []
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence:
+            # Only remove very obvious incomplete fragments
+            words = sentence.split()
+
+            # Keep sentences with meaningful content
+            if len(words) >= STT_MIN_SENTENCE_WORDS:
+                # Additional check: don't remove sentences that start with common words
+                if not re.match(r'^(and|but|or|so|then|well|okay|now|yes|no|oh|ah|um|uh)$', words[0], re.IGNORECASE):
+                    cleaned_sentences.append(sentence)
+                elif len(words) >= 3:  # Allow short sentences if they start with common words
+                    cleaned_sentences.append(sentence)
+            elif len(words) == 1 and words[0].lower() in ['okay', 'well', 'now', 'yes', 'no']:
+                # Keep single meaningful words
+                cleaned_sentences.append(sentence)
+
+    # Rejoin sentences with proper punctuation
+    if cleaned_sentences:
+        text = '. '.join(cleaned_sentences)
+        if text and not text.endswith('.'):
+            text += '.'
+    else:
+        # If we removed everything, keep the original but clean it up
+        text = text.strip()
+        if text and not text.endswith('.'):
+            text += '.'
+
+    # Step 7: Clean up extra whitespace
+    text = re.sub(r'\s+', ' ', text)  # Multiple spaces to single space
+    text = text.strip()
+
+    # Step 8: Fix capitalization more intelligently
+    if text:
+        # Capitalize first letter
+        text = text[0].upper() + text[1:]
+
+        # Capitalize after periods, but be careful with abbreviations
+        text = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), text)
+
+        # Fix common capitalization issues
+        text = re.sub(r'\b(i)\b', 'I', text)  # Capitalize "i" when alone
+
+    logging.info(f"Cleaned text: {text}")
+    return text
 
 def log_user_info():
     """Log current user information."""
@@ -373,8 +486,16 @@ def main():
         logging.info("No text recognized")
         return
 
+        # Clean up the transcribed text to remove speech artifacts (if enabled)
+    if STT_CLEAN_TEXT:
+        cleaned_text = clean_transcribed_text(full_text)
+        logging.info("Text cleaning applied")
+    else:
+        cleaned_text = full_text
+        logging.info("Text cleaning disabled, using original transcription")
+
     # Always write to output file for downstream consumers (e.g., root ydotool typer)
-    write_output_file(full_text)
+    write_output_file(cleaned_text)
 
     # Check output mode from environment variable
     stt_mode = os.environ.get("STT_MODE", "clipboard").lower()
@@ -383,17 +504,17 @@ def main():
     if stt_mode == "type":
         # Automatic typing mode
         logging.info("Using automatic typing mode")
-        if not paste_text(full_text):
+        if not paste_text(cleaned_text):
             # Fallback to old typing method if paste fails
             logging.info("Automatic paste failed, falling back to typing method")
-            type_text(full_text)
+            type_text(cleaned_text)
     elif stt_mode == "clipboard":
         # Clipboard + notification mode (no automatic typing)
         logging.info("Using clipboard + notification mode")
-        paste_text(full_text)
+        paste_text(cleaned_text)
     else:
         logging.warning(f"Unknown STT_MODE: {stt_mode}, defaulting to clipboard mode")
-        paste_text(full_text)
+        paste_text(cleaned_text)
 
     logging.info("Processing completed")
 

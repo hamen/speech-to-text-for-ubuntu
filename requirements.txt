@@ -1,6 +1,19 @@
 # Python dependencies for Speech-to-Text Key Listener
+# Core dependencies
 numpy
 soundfile
 pyautogui
 evdev
-faster-whisper 
+faster-whisper
+
+# GPU acceleration (CUDA 12.1 compatible)
+# Note: PyTorch will be installed separately via run.sh for optimal CUDA support
+# torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Optional: Additional audio processing libraries for better quality
+librosa
+scipy
+
+# Model testing and monitoring
+psutil
+GPUtil
