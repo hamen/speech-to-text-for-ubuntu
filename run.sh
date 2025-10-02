@@ -75,6 +75,20 @@ echo "🎯 Model: $STT_MODEL"
 echo "🔧 Beam Size: $STT_BEAM_SIZE"
 echo ""
 
+# Install system dependencies based on session type
+echo "📦 Installing system dependencies..."
+SESSION_TYPE=$(echo $XDG_SESSION_TYPE | tr '[:upper:]' '[:lower:]')
+if [[ "$SESSION_TYPE" == "wayland" ]]; then
+    echo "🌊 Installing Wayland clipboard tools..."
+    apt update -qq && apt install -y wl-clipboard libnotify-bin
+elif [[ "$SESSION_TYPE" == "x11" ]] || [[ -n "$DISPLAY" ]]; then
+    echo "🖥️  Installing X11 clipboard tools..."
+    apt update -qq && apt install -y xclip xsel libnotify-bin
+else
+    echo "❓ Installing both Wayland and X11 clipboard tools (unknown session type)..."
+    apt update -qq && apt install -y wl-clipboard xclip xsel libnotify-bin
+fi
+
 # Check if virtual environment exists
 if [[ ! -d "venv" ]]; then
     echo "📦 Creating Python virtual environment..."

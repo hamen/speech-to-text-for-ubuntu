@@ -432,17 +432,68 @@ def type_text(text):
     logging.error("No available method to type text. Install 'wtype' on Wayland or use an Xorg session.")
 
 def _copy_to_clipboard(text: str) -> bool:
-    """Copy text to clipboard using wl-copy (Wayland) or xclip/xsel (X11)."""
+    """Copy text to clipboard using appropriate tool for session type (Wayland/X11)."""
     try:
-        if shutil.which("wl-copy"):
-            p = subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True)
-            return p.returncode == 0
+        # Detect session type
+        session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        is_wayland = session_type == "wayland"
+        is_x11 = session_type == "x11" or "DISPLAY" in os.environ
+
+        logging.info(f"Session type: {session_type}, Wayland: {is_wayland}, X11: {is_x11}")
+
+        # Prioritize tools based on session type
+        if is_wayland:
+            # Try Wayland tools first on Wayland
+            if shutil.which("wl-copy"):
+                try:
+                    p = subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True)
+                    return p.returncode == 0
+                except subprocess.CalledProcessError:
+                    logging.warning("wl-copy failed, trying other Wayland tools")
+            if shutil.which("wtype") and shutil.which("wl-paste"):
+                # Alternative Wayland approach using wtype
+                try:
+                    # Use wtype to simulate clipboard operations
+                    p = subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True)
+                    return p.returncode == 0
+                except subprocess.CalledProcessError:
+                    pass
+        else:
+            # Try X11 tools first on X11 or unknown sessions
+            if shutil.which("xclip"):
+                try:
+                    p = subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode("utf-8"), check=True)
+                    return p.returncode == 0
+                except subprocess.CalledProcessError:
+                    logging.warning("xclip failed, trying xsel")
+            if shutil.which("xsel"):
+                try:
+                    p = subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode("utf-8"), check=True)
+                    return p.returncode == 0
+                except subprocess.CalledProcessError:
+                    logging.warning("xsel failed")
+
+        # Fallback: try any available tool regardless of session type
+        logging.info("Trying fallback clipboard tools")
+        if shutil.which("wl-copy") and not is_x11:
+            try:
+                p = subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True)
+                return p.returncode == 0
+            except subprocess.CalledProcessError:
+                pass
         if shutil.which("xclip"):
-            p = subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode("utf-8"), check=True)
-            return p.returncode == 0
+            try:
+                p = subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode("utf-8"), check=True)
+                return p.returncode == 0
+            except subprocess.CalledProcessError:
+                pass
         if shutil.which("xsel"):
-            p = subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode("utf-8"), check=True)
-            return p.returncode == 0
+            try:
+                p = subprocess.run(["xsel", "--clipboard", "--input"], input=text.encode("utf-8"), check=True)
+                return p.returncode == 0
+            except subprocess.CalledProcessError:
+                pass
+
     except Exception as e:
         logging.error(f"Failed to copy to clipboard: {e}")
     return False

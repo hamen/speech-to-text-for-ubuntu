@@ -101,8 +101,12 @@ python3 speech_to_text.py <audio_file>
    # Input inspection
    sudo apt install -y evtest
 
-   # Wayland clipboard + notifications
+   # Install clipboard tools based on your desktop environment:
+   # For Wayland (GNOME, KDE Plasma, etc.):
    sudo apt install -y wl-clipboard libnotify-bin
+
+   # For X11/Xfce4:
+   sudo apt install -y xclip xsel libnotify-bin
 
    # Wayland typing helpers
    sudo apt install -y wtype ydotool
@@ -200,8 +204,10 @@ The system supports two distinct output modes that you can choose from:
 
 **📋 Manual Pasting Mode (`STT_MODE=clipboard`):**
 - Copies transcribed text to clipboard
-- **Plays completion sound** when ready to paste (default)
-- Optional desktop notification with text preview
+- **Automatic session detection**: Uses appropriate clipboard tool for your desktop environment
+- **X11/Xfce4 Support**: Fixed clipboard functionality on X11 systems with `xclip`/`xsel`
+- **Sound notification** when ready to paste (enabled by default)
+- Optional desktop notification with text preview (disabled by default)
 - **No automatic typing** - you control where and when to paste
 - Perfect for avoiding focus issues and unwanted text input
 
@@ -363,10 +369,41 @@ speech-to-text-for-ubuntu/
 - **🧹 Text cleaning** - Intelligent speech artifact removal
 - **🔊 Sound notifications** - Audio feedback instead of desktop notifications
 
-## Wayland notes
+## Desktop Environment Compatibility
 
+### Wayland Notes
 - On GNOME Wayland the virtual keyboard protocol may be disabled by default; enable it in settings or rely on clipboard+notification.
 - If `ydotool` is installed and `ydotoold` is available, the system will use it for more reliable typing. `run.sh` tries to start `ydotoold` on `/tmp/.ydotoool_socket` with relaxed permissions.
+
+### X11/Xfce4 Support
+- **✅ Clipboard Fixed**: X11/Xfce4 clipboard functionality now works correctly with automatic session detection
+- **Tools Used**: `xclip` (primary) and `xsel` (fallback) for X11 clipboard operations
+- **Installation**: `sudo apt install xclip xsel` for X11 clipboard support
+- **Detection**: System automatically detects X11 sessions and prioritizes X11 clipboard tools
+
+### Troubleshooting Desktop Environment Issues
+
+**X11 Clipboard Not Working:**
+```bash
+# Test clipboard functionality
+./test-clipboard.sh
+
+# Install X11 clipboard tools
+sudo apt install xclip xsel
+
+# Verify session type
+echo $XDG_SESSION_TYPE
+echo $DISPLAY
+```
+
+**Wayland Clipboard Not Working:**
+```bash
+# Install Wayland clipboard tools
+sudo apt install wl-clipboard
+
+# Test Wayland clipboard
+echo "test" | wl-copy && wl-paste
+```
 
 ## Real-World Usage
 
@@ -377,6 +414,8 @@ speech-to-text-for-ubuntu/
 - **📝 General Writing** - Any application requiring voice input
 
 The **large-v3 model on GPU** provides near-instant, high-quality transcription that makes voice input feel as natural as typing. The intelligent text cleaning ensures your thoughts flow smoothly without the typical speech artifacts that make raw transcription hard to read.
+
+**✅ X11/Xfce4 Support Confirmed**: Clipboard functionality now works perfectly on X11 desktop environments (like Xfce4) with automatic session detection and appropriate clipboard tool selection.
 
 ## Notes
 - You may need to adjust device paths and user names in the scripts to match your system.

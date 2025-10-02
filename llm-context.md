@@ -160,8 +160,10 @@ export STT_FIX_PUNCTUATION=1
 
 ### Manual Pasting Mode (`STT_MODE=clipboard`)
 - **No automatic typing**
-- Text copied to clipboard using `wl-copy` (Wayland) or `xclip`/`xsel` (X11)
-- Desktop notification with text preview
+- Text copied to clipboard with automatic session detection: `wl-copy` on Wayland, `xclip`/`xsel` on X11
+- **X11 Support Fixed**: Now properly detects X11/Xfce4 sessions and prioritizes X11 clipboard tools
+- Desktop notification with text preview (optional, disabled by default)
+- **Sound notification** when transcription complete (enabled by default)
 - User manually pastes with Ctrl+V
 
 ## Dependencies & Installation
@@ -203,6 +205,10 @@ export STT_FIX_PUNCTUATION=1
 - **Beautiful Interface**: Gum-powered interactive menu for easy management
 - **Organized Logging**: Dedicated log directory with proper gitignore
 - **Mode Respect**: Key listener now properly respects STT_MODE environment variable
+- **X11 Clipboard Fix**: Fixed clipboard functionality on X11/Xfce4 systems by adding session detection
+- **Sound Notifications**: Replaced desktop notifications with clean audio feedback
+- **Configuration Management**: Persistent user preferences with interactive configuration menu
+- **GPU Optimization**: Optimized for RTX 4070 with large-v3 model and CUDA acceleration
 
 ## GPU Optimization for RTX 4070
 
