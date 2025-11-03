@@ -26,6 +26,8 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 
 - **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription.
 
+- **setup-keyboard-shortcut.sh**: Automated script to restore or configure Ctrl+Alt+F12 → F16 keyboard mapping using input-remapper.
+
 ## Requirements
 
 - Python 3.x
@@ -113,9 +115,20 @@ python3 speech_to_text.py <audio_file>
 
    # GPU acceleration (if you have NVIDIA GPU)
    sudo apt install -y nvidia-driver-*
+   
+   # Keyboard remapping (for Ctrl+Alt+F12 → F16 mapping)
+   sudo apt install -y input-remapper
    ```
 
-6. **Remap your mouse button to an unused key (e.g., F16) using input-remapper or similar tool.**
+6. **Setup keyboard shortcut mapping:**
+   ```bash
+   # Automated setup (recommended)
+   ./setup-keyboard-shortcut.sh
+   
+   # Or manually remap using input-remapper GUI
+   input-remapper-gtk
+   ```
+   This will map Ctrl+Alt+F12 (or Ctrl+Shift+F12) to F16, which triggers speech-to-text recording.
 
 ## Usage
 
@@ -417,11 +430,49 @@ The **large-v3 model on GPU** provides near-instant, high-quality transcription 
 
 **✅ X11/Xfce4 Support Confirmed**: Clipboard functionality now works perfectly on X11 desktop environments (like Xfce4) with automatic session detection and appropriate clipboard tool selection.
 
+**⌨️ Keyboard Shortcut Setup**: If you lose your Ctrl+Alt+F12 → F16 mapping, simply run `./setup-keyboard-shortcut.sh` to restore it automatically. The script detects your keyboard, creates the preset, and opens the input-remapper GUI for final configuration.
+
+## Keyboard Shortcut Setup
+
+The system listens for **F16** key presses to trigger recording. To map Ctrl+Alt+F12 (or Ctrl+Shift+F12) to F16:
+
+### Quick Setup
+```bash
+./setup-keyboard-shortcut.sh
+```
+
+This script will:
+1. ✅ Detect your keyboard device automatically
+2. ✅ Create the preset configuration file
+3. ✅ Start input-remapper service
+4. ✅ Open the GUI for final configuration
+
+### Manual Setup
+1. Open input-remapper GUI: `input-remapper-gtk`
+2. Select your keyboard device
+3. Map F12 → F16 (with Ctrl+Alt condition)
+4. Enable the preset and autoload
+
+### Troubleshooting Keyboard Shortcuts
+```bash
+# Restore keyboard shortcut mapping
+./setup-keyboard-shortcut.sh
+
+# Check input-remapper service
+input-remapper-control --command start
+pgrep -a input-remapper
+
+# Test F16 detection (run as root)
+sudo evtest /dev/input/event12
+# Press your shortcut and look for KEY_F16 events
+```
+
 ## Notes
 - You may need to adjust device paths and user names in the scripts to match your system.
 - The script assumes you have a Python virtual environment (e.g., `/home/david/venv/bin/python3`) with the necessary packages installed.
 - For GPU acceleration, ensure you have CUDA-compatible PyTorch installed.
 - The system automatically downloads Whisper models on first use.
+- **Keyboard shortcut**: Use `./setup-keyboard-shortcut.sh` to restore your Ctrl+Alt+F12 → F16 mapping if it's lost.
 
 ## License
 

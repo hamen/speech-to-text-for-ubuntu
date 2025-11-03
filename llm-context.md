@@ -28,6 +28,7 @@
 - **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription, loads persistent user preferences
 - **`launch-large-v3.sh`** - One-command launcher for large-v3 GPU configuration
 - **`config-manager.sh`** - Comprehensive configuration management with persistent storage and interactive menu
+- **`setup-keyboard-shortcut.sh`** - Automated script to restore Ctrl+Alt+F12 → F16 keyboard mapping using input-remapper
 
 ### Configuration & Logs
 - **`log/`** - Dedicated directory for all system logs (gitignored)
@@ -35,7 +36,9 @@
 - **`requirements.txt`** - Python dependencies for the virtual environment
 
 ## Defaults & Paths
-- **Hotkey**: F16 (remapped from Shift+Ctrl+F12 via input-remapper)
+- **Hotkey**: F16 (remapped from Ctrl+Alt+F12 or Ctrl+Shift+F12 via input-remapper)
+- **Keyboard Shortcut Setup**: Use `./setup-keyboard-shortcut.sh` to restore or configure the mapping
+- **Input Remapper Config**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **Audio File**: `/tmp/recorded_audio.wav`
 - **Log Files**: `log/key_listener.log`, `log/speech_to_text.log`
 - **Output File**: `/tmp/speech_to_text_output.txt`
@@ -176,6 +179,7 @@ export STT_FIX_PUNCTUATION=1
 - `wtype` - Wayland virtual keyboard
 - `ydotool` + `ydotoold` - Wayland input simulation
 - `nvidia-driver-*` - NVIDIA GPU drivers (for CUDA acceleration)
+- `input-remapper` - Keyboard shortcut remapping (for Ctrl+Alt+F12 → F16 mapping)
 
 ### Python Packages
 - `numpy` - Audio processing
@@ -193,12 +197,14 @@ export STT_FIX_PUNCTUATION=1
 2. **Audio Recording**: Prefers PipeWire (`pw-record`) over ALSA (`arecord`)
 3. **Wayland Compatibility**: Virtual keyboard protocol may be disabled in GNOME
 4. **Focus Issues**: Auto-typing can type in wrong window if focus changes
+5. **Lost Keyboard Shortcut**: If Ctrl+Alt+F12 → F16 mapping is lost, run `./setup-keyboard-shortcut.sh` to restore it
 
 ### Best Practices
 1. **Use Interactive Menu**: `./menu.sh` handles most setup automatically
 2. **Choose Output Mode**: Clipboard mode is more reliable for Wayland
 3. **Check Logs**: Monitor `log/` directory for troubleshooting
 4. **Test Hotkey**: Ensure F16 is properly mapped and not used by other applications
+5. **Setup Keyboard Shortcut**: Run `./setup-keyboard-shortcut.sh` if you lose your Ctrl+Alt+F12 → F16 mapping
 
 ### Recent Improvements
 - **Dual Output Modes**: Clean separation between auto-typing and manual pasting
@@ -209,6 +215,7 @@ export STT_FIX_PUNCTUATION=1
 - **Sound Notifications**: Replaced desktop notifications with clean audio feedback
 - **Configuration Management**: Persistent user preferences with interactive configuration menu
 - **GPU Optimization**: Optimized for RTX 4070 with large-v3 model and CUDA acceleration
+- **Keyboard Shortcut Setup**: Automated script to restore Ctrl+Alt+F12 → F16 mapping using input-remapper GUI
 
 ## GPU Optimization for RTX 4070
 
@@ -375,6 +382,11 @@ source large-v3-config.sh        # Load large-v3 configuration
 ./config-manager.sh menu         # Open configuration menu
 ./config-manager.sh show         # Show current configuration
 ./config-manager.sh init         # Initialize configuration file
+
+# Keyboard shortcut setup
+./setup-keyboard-shortcut.sh     # Restore Ctrl+Alt+F12 → F16 mapping
+input-remapper-gtk               # Open input-remapper GUI manually
+input-remapper-control --command start  # Start input-remapper service
 
 # Model management
 ./download-models.sh             # Download and test all models
