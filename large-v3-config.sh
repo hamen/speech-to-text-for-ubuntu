@@ -72,7 +72,7 @@ export STT_DEVICE="cuda"              # GPU acceleration
 export STT_COMPUTE_TYPE="float16"     # Optimal precision/speed balance for RTX 4070
 
 # Quality vs Speed Optimization
-export STT_BEAM_SIZE="5"              # Maximum accuracy (1-5, 5 = best)
+# STT_BEAM_SIZE is loaded from persistent config (line 25) - do not override here
 export STT_TEMPERATURE="0.0"          # Deterministic output (0.0 = most accurate)
 export STT_VAD="1"                    # Voice Activity Detection enabled
 export STT_CONDITION="1"              # Text conditioning enabled
