@@ -22,6 +22,7 @@ import re
 
 OUTPUT_FILE = "/tmp/speech_to_text_output.txt"
 TYPE_SUCCESS_FILE = "/tmp/speech_to_text_typed.ok"
+STT_SERVER_SOCKET = "/tmp/stt_server.sock"
 
 # Text cleaning configuration
 STT_CLEAN_TEXT = os.environ.get("STT_CLEAN_TEXT", "1").lower() in ("1", "true", "yes")
@@ -196,8 +197,75 @@ def load_audio(file_path):
         logging.error(f"Failed to read audio file {file_path}: {e}")
         sys.exit(1)
 
-def transcribe_audio(audio):
-    """Transcribe audio using Whisper."""
+def _try_server_transcription(audio_file: str) -> list | None:
+    """Try to transcribe using the persistent STT server. Returns None if server unavailable."""
+    import socket
+    import json
+    
+    if not os.path.exists(STT_SERVER_SOCKET):
+        return None
+    
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(30.0)  # 30 second timeout for transcription
+        sock.connect(STT_SERVER_SOCKET)
+        
+        # Send request
+        request = json.dumps({"audio_path": audio_file}) + "\n"
+        sock.sendall(request.encode('utf-8'))
+        
+        # Receive response
+        data = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+            if b"\n" in data:
+                break
+        
+        sock.close()
+        
+        if not data:
+            logging.warning("Empty response from STT server")
+            return None
+        
+        response = json.loads(data.decode('utf-8').strip())
+        
+        if "error" in response:
+            logging.error(f"STT server error: {response['error']}")
+            return None
+        
+        text = response.get("text", "")
+        if text:
+            logging.info(f"Server transcribed in {response.get('duration', 0):.2f}s: {text}")
+            return [text]  # Return as list to match local transcription format
+        else:
+            logging.info("Server returned empty transcription")
+            return []
+        
+    except socket.timeout:
+        logging.warning("STT server timeout")
+        return None
+    except ConnectionRefusedError:
+        logging.info("STT server not running")
+        return None
+    except Exception as e:
+        logging.warning(f"STT server connection failed: {e}")
+        return None
+
+
+def transcribe_audio(audio, audio_file: str = None):
+    """Transcribe audio using Whisper. Uses persistent server if available."""
+    
+    # Try the persistent server first (much faster - model already loaded)
+    if audio_file:
+        server_result = _try_server_transcription(audio_file)
+        if server_result is not None:
+            return server_result
+        logging.info("Falling back to local model (server unavailable)")
+    
+    # Fall back to loading model locally
     try:
         model_name = os.environ.get("STT_MODEL", "tiny.en")
         device = os.environ.get("STT_DEVICE", "cpu")
@@ -563,8 +631,8 @@ def main():
     # Load audio
     audio = load_audio(audio_file)
 
-    # Transcribe
-    segments = transcribe_audio(audio)
+    # Transcribe (tries persistent server first, falls back to local model)
+    segments = transcribe_audio(audio, audio_file=audio_file)
 
     # Combine segments into one text line
     full_text = " ".join(segments).strip()

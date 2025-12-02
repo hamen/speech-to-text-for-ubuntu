@@ -5,6 +5,8 @@ A powerful Python project that provides **push-to-talk speech recognition** usin
 **🎯 Key Features:**
 - **Push-to-talk recording** - Press and hold to record, release to process
 - **Native Keyboard Shortcuts** - Works out of the box with **Double-Control** or **Double-Super** keys
+- **⚡ Persistent Model Server** - Model stays in memory for **instant transcription** (~0.4s instead of ~2.6s)
+- **🌍 Multilingual Support** - 99 languages with automatic detection (Italian, English, Spanish, etc.)
 - **Multiple output modes** - Choose between automatic typing or clipboard + notification
 - **Beautiful interactive menu** - Easy setup and configuration with [Gum](https://github.com/charmbracelet/gum)
 - **Offline transcription** - Works without internet using local Whisper models
@@ -18,9 +20,10 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 ## Project Overview
 
 - **key_listener.py**: Monitors keyboard devices for dictation shortcuts. Now supports listening on **all connected keyboards** simultaneously, making it robust against remapping tools and different hardware.
-- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Supports multiple output modes and includes intelligent text cleaning.
-- **menu.sh**: Beautiful interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for easy setup, mode selection, and system management.
-- **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription.
+- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Automatically uses the persistent server when available for instant transcription.
+- **stt_server.py**: **Persistent model server** that keeps the Whisper model loaded in memory. Eliminates the ~2 second model loading time for each transcription request.
+- **menu.sh**: Beautiful interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for easy setup, mode selection, and system management. Automatically starts the persistent server.
+- **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
 
 ## 🎤 Keyboard Shortcuts
 
@@ -78,10 +81,23 @@ This will start the key listener. You can then immediately use **Double-Tap Left
 - Python 3.x
 - Linux (tested on Ubuntu 24.04.2 LTS)
 - Python virtual environment with required packages installed
-- `arecord` (for audio recording)
+- `arecord` or `pw-record` (for audio recording)
 - `evdev` (for key listening)
-- A speech-to-text model Faster Whisper
-- **Optional**: NVIDIA GPU with CUDA support for acceleration
+- Faster Whisper (speech-to-text model)
+
+### For GPU Acceleration (Recommended)
+- NVIDIA GPU with CUDA support
+- NVIDIA Driver (tested with 580.x)
+- **cuDNN library** (required for GPU inference):
+  ```bash
+  sudo apt install nvidia-cudnn
+  ```
+
+### Optional Tools
+- `wl-clipboard` - Clipboard support on Wayland
+- `xclip` / `xsel` - Clipboard support on X11
+- `libnotify-bin` - Desktop notifications
+- `input-remapper` - For custom key remapping (F16 shortcut)
 
 ## Usage
 
@@ -109,6 +125,22 @@ source ./gpu-config.sh
 ```
 
 ## How it Works
+
+### ⚡ Persistent Model Server
+
+The system uses a **persistent model server** architecture for instant transcription:
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  key_listener   │────▶│ speech_to_text   │────▶│   stt_server    │
+│  (detects keys) │     │ (processes audio)│     │ (model in RAM)  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+- **Without server**: Each transcription takes ~2.6s (model loads every time)
+- **With server**: Each transcription takes ~0.4s (model stays in memory)
+
+The menu automatically starts the server when you select "🚀 Run Large-v3 GPU (Recommended)".
 
 ### Output Modes
 
@@ -149,6 +181,7 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 - `STT_DEVICE` (default: `cuda`) — `cuda`, `rocm`, `auto`, or `cpu`.
 - `STT_COMPUTE_TYPE` — defaults to `float16` on GPU, `int8` on CPU. Options: `int8`, `int8_float16`, `float16`, `float32`.
 - `STT_BEAM_SIZE` (default: `5`) — increase (e.g., `5`) for better accuracy, slightly slower.
+- `STT_LANGUAGE` (default: `auto`) — language code or `auto` for automatic detection. Examples: `en`, `it`, `es`, `de`, `fr`.
 
 ### Text Cleaning Configuration
 - `STT_CLEAN_TEXT` (default: `1`) - Enable/disable text cleaning

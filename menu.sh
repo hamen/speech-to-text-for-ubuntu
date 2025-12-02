@@ -198,8 +198,16 @@ run_large_v3_gpu() {
             export STT_DEVICE="cuda"
             export STT_COMPUTE_TYPE="float16"
             export STT_BEAM_SIZE="5"
+            export STT_LANGUAGE="auto"
             export STT_MODE="clipboard"
             export STT_CLEAN_TEXT="1"
+            export STT_REMOVE_FILLERS="1"
+            export STT_FIX_REPETITIONS="1"
+            export STT_FIX_PUNCTUATION="1"
+            export STT_VAD="1"
+            export STT_TEMPERATURE="0.0"
+            export STT_USE_SOUND="1"
+            export STT_USE_NOTIFICATION="0"
         fi
 
         # Ensure required packages are installed
@@ -214,23 +222,91 @@ run_large_v3_gpu() {
         echo "   Device: $STT_DEVICE"
         echo "   Compute Type: $STT_COMPUTE_TYPE"
         echo "   Beam Size: $STT_BEAM_SIZE"
+        echo "   Language: $STT_LANGUAGE (auto = detect, en = English, it = Italian)"
         echo "   Output Mode: $STT_MODE"
         echo "   Text Cleaning: $STT_CLEAN_TEXT"
         echo ""
 
         echo "🚀 Launching Large-v3 Speech-to-Text System..."
-        echo "   Press F16 (or your configured hotkey) to start recording"
+        echo "   Press F16 (or Double-Control or Double-Super) to start recording"
         echo "   Press Ctrl+C to stop"
         echo ""
         echo "💡 Features:"
         echo "   • Best quality transcription with large-v3 model"
         echo "   • GPU acceleration for fast processing"
+        echo "   • Multilingual support (99 languages including Italian)"
         echo "   • Intelligent text cleaning (removes fillers, fixes stuttering)"
         echo "   • Manual pasting mode (reliable clipboard + notification)"
+        echo "   • ⚡ Persistent model server (instant transcription)"
+        echo ""
+
+        # Start the persistent STT server in background (loads model once)
+        echo "🔄 Starting persistent STT server (model stays in memory)..."
+        
+        # Kill any existing server
+        pkill -f "python3.*stt_server.py" 2>/dev/null || true
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
+        sleep 0.5
+        
+        # Start server with all STT_ environment variables
+        STT_MODEL="$STT_MODEL" \
+        STT_DEVICE="$STT_DEVICE" \
+        STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
+        STT_BEAM_SIZE="$STT_BEAM_SIZE" \
+        STT_LANGUAGE="$STT_LANGUAGE" \
+        STT_VAD="$STT_VAD" \
+        STT_TEMPERATURE="$STT_TEMPERATURE" \
+        nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_server.py" >> "$REPO_DIR/log/stt_server.log" 2>&1 &
+        
+        SERVER_PID=$!
+        echo "   Server PID: $SERVER_PID"
+        
+        # Wait for server to be ready (socket file appears)
+        echo "   Waiting for model to load..."
+        for i in {1..60}; do
+            if [[ -S /tmp/stt_server.sock ]]; then
+                echo "✅ STT server ready! Model loaded and waiting for requests."
+                break
+            fi
+            sleep 1
+            # Check if server died
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+                echo "❌ Server failed to start. Check log/stt_server.log"
+                cat "$REPO_DIR/log/stt_server.log" | tail -20
+                return 1
+            fi
+        done
+        
+        if [[ ! -S /tmp/stt_server.sock ]]; then
+            echo "❌ Server timeout. Check log/stt_server.log"
+            return 1
+        fi
+        
         echo ""
 
         # Launch the key listener with large-v3 configuration
-        sudo -E python3 "$REPO_DIR/key_listener.py"
+        # Pass all STT_ environment variables explicitly to sudo
+        # Note: speech_to_text.py will automatically use the server
+        sudo STT_MODEL="$STT_MODEL" \
+             STT_DEVICE="$STT_DEVICE" \
+             STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
+             STT_BEAM_SIZE="$STT_BEAM_SIZE" \
+             STT_LANGUAGE="$STT_LANGUAGE" \
+             STT_MODE="$STT_MODE" \
+             STT_CLEAN_TEXT="$STT_CLEAN_TEXT" \
+             STT_REMOVE_FILLERS="$STT_REMOVE_FILLERS" \
+             STT_FIX_REPETITIONS="$STT_FIX_REPETITIONS" \
+             STT_FIX_PUNCTUATION="$STT_FIX_PUNCTUATION" \
+             STT_VAD="$STT_VAD" \
+             STT_TEMPERATURE="$STT_TEMPERATURE" \
+             STT_USE_SOUND="$STT_USE_SOUND" \
+             STT_USE_NOTIFICATION="$STT_USE_NOTIFICATION" \
+             python3 "$REPO_DIR/key_listener.py"
+        
+        # Cleanup server when key listener exits
+        echo "🛑 Stopping STT server..."
+        pkill -f "python3.*stt_server.py" 2>/dev/null || true
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
     fi
 }
 

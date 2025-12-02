@@ -20,13 +20,45 @@ fi
 
 # Model Selection
 export STT_MODEL="${STT_MODEL:-large-v3}"                    # Best quality transcription
-export STT_DEVICE="${STT_DEVICE:-cuda}"                      # GPU acceleration
-export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"        # Optimal precision/speed balance
+
+# Check if cuDNN is available for GPU mode
+_check_cudnn() {
+    # Method 1: Check ldconfig cache
+    if ldconfig -p 2>/dev/null | grep -q "libcudnn"; then
+        return 0
+    fi
+    # Method 2: Check common library paths directly (suppress glob errors)
+    for lib_path in /usr/lib/x86_64-linux-gnu /usr/local/lib /usr/lib; do
+        if find "$lib_path" -maxdepth 1 -name 'libcudnn*.so*' 2>/dev/null | head -1 | grep -q libcudnn; then
+            return 0
+        fi
+    done
+    # Method 3: Check if nvidia-cudnn package is installed
+    if dpkg -l nvidia-cudnn 2>/dev/null | grep -q "^ii"; then
+        return 0
+    fi
+    return 1
+}
+
+if [[ "${STT_DEVICE:-auto}" == "cuda" ]] || [[ "${STT_DEVICE:-auto}" == "auto" ]]; then
+    if ! _check_cudnn; then
+        echo "⚠️  cuDNN not found - falling back to CPU mode"
+        echo "   To enable GPU: sudo apt install nvidia-cudnn"
+        export STT_DEVICE="cpu"
+        export STT_COMPUTE_TYPE="int8"
+    else
+        export STT_DEVICE="${STT_DEVICE:-cuda}"
+        export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"
+    fi
+else
+    export STT_DEVICE="${STT_DEVICE:-cuda}"
+    export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"
+fi
 export STT_BEAM_SIZE="${STT_BEAM_SIZE:-5}"                    # Maximum accuracy
 export STT_TEMPERATURE="${STT_TEMPERATURE:-0.0}"              # Deterministic output
 export STT_VAD="${STT_VAD:-1}"                               # Voice Activity Detection
 export STT_CONDITION="${STT_CONDITION:-1}"                    # Text conditioning
-export STT_LANGUAGE="${STT_LANGUAGE:-en}"                     # English language
+export STT_LANGUAGE="${STT_LANGUAGE:-auto}"                    # Auto-detect language (supports 99 languages)
 
 # Output Mode
 export STT_MODE="${STT_MODE:-clipboard}"                      # Manual pasting (reliable)
@@ -76,7 +108,8 @@ export STT_COMPUTE_TYPE="float16"     # Optimal precision/speed balance for RTX 
 export STT_TEMPERATURE="0.0"          # Deterministic output (0.0 = most accurate)
 export STT_VAD="1"                    # Voice Activity Detection enabled
 export STT_CONDITION="1"              # Text conditioning enabled
-export STT_LANGUAGE="en"              # English language hint
+# STT_LANGUAGE is loaded from persistent config (line 29) - do not override here
+# Options: "auto" (detect), "en" (English), "it" (Italian), "de" (German), etc.
 
 # =============================================================================
 # MANUAL PASTING MODE (No Automatic Typing)
@@ -127,6 +160,7 @@ echo "🎯 Model: $STT_MODEL (Best Quality)"
 echo "🚀 Device: $STT_DEVICE (GPU Acceleration)"
 echo "⚡ Compute Type: $STT_COMPUTE_TYPE"
 echo "🎯 Beam Size: $STT_BEAM_SIZE (Maximum Accuracy)"
+echo "🌍 Language: $STT_LANGUAGE (auto = detect, en = English, it = Italian)"
 echo "📝 Output Mode: $STT_MODE (Manual Pasting)"
 echo "🧹 Text Cleaning: $STT_CLEAN_TEXT (Enabled)"
 echo ""
@@ -143,6 +177,7 @@ echo "   STT_MODEL=$STT_MODEL"
 echo "   STT_DEVICE=$STT_DEVICE"
 echo "   STT_COMPUTE_TYPE=$STT_COMPUTE_TYPE"
 echo "   STT_BEAM_SIZE=$STT_BEAM_SIZE"
+echo "   STT_LANGUAGE=$STT_LANGUAGE"
 echo "   STT_MODE=$STT_MODE"
 echo "   STT_CLEAN_TEXT=$STT_CLEAN_TEXT"
 echo ""

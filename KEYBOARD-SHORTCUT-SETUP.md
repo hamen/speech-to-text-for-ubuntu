@@ -103,6 +103,35 @@ input-remapper-control --command start
 - **Preset file**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **Main config**: `~/.config/input-remapper/config.json`
 
+## Language Configuration
+
+The system supports **99 languages** including Italian, German, Spanish, French, and more.
+
+### Auto-Detect Language (Default)
+The default configuration now uses **automatic language detection**. Just speak in any language and it will be transcribed correctly.
+
+### Force a Specific Language
+If you primarily speak one language, you can set it explicitly for slightly better accuracy:
+
+```bash
+# Italian
+export STT_LANGUAGE="it"
+
+# German
+export STT_LANGUAGE="de"
+
+# Spanish
+export STT_LANGUAGE="es"
+
+# French
+export STT_LANGUAGE="fr"
+
+# Auto-detect (default)
+export STT_LANGUAGE="auto"
+```
+
+To make this permanent, add the line to your `~/.config/speech-to-text/config.conf` file.
+
 ## Notes
 
 - The mapping persists across reboots once enabled in input-remapper GUI
