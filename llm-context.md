@@ -11,45 +11,41 @@
 - **CUDA**: 12.9 with optimized PyTorch installation
 
 ## How It Works (High-Level)
-1. **Push-to-Talk Recording**: User presses and holds a hotkey (F16) to record audio
-2. **Audio Processing**: System records audio using `pw-record` (PipeWire) or `arecord` (ALSA)
-3. **Offline Transcription**: Audio is processed using Faster Whisper models locally with GPU acceleration
-4. **Intelligent Text Cleaning**: Transcribed text is automatically cleaned to remove speech artifacts while preserving meaningful content
-5. **Output Modes**: User can choose between automatic typing or clipboard + notification
-6. **Fallback System**: Multiple input methods for maximum compatibility
+1. **Push-to-Talk Recording**: User triggers recording via one of multiple methods:
+   - **Native Double-Tap**: Double-tap and hold **Left Control** or **Left Super**.
+   - **Legacy Hotkey**: Press and hold **F16** (often remapped from a mouse button).
+2. **Input Detection**: The system listens on **all connected keyboards** simultaneously, ensuring robust detection regardless of remapping tools.
+3. **Audio Processing**: System records audio using `pw-record` (PipeWire) or `arecord` (ALSA).
+4. **Offline Transcription**: Audio is processed using Faster Whisper models locally with GPU acceleration.
+5. **Intelligent Text Cleaning**: Transcribed text is automatically cleaned to remove speech artifacts while preserving meaningful content.
+6. **Output Modes**: User can choose between automatic typing or clipboard + notification.
 
 ## Key Files & Their Purpose
 
 ### Core Scripts
-- **`key_listener.py`** - Main orchestrator: listens for hotkey, records audio, calls speech processing
-- **`speech_to_text.py`** - Audio processor: loads audio, transcribes with Whisper, handles output modes, applies intelligent text cleaning
-- **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management, includes dedicated large-v3 GPU configuration and configuration management
-- **`run.sh`** - Automated setup script for dependencies and system launch with GPU optimization
-- **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription, loads persistent user preferences
-- **`launch-large-v3.sh`** - One-command launcher for large-v3 GPU configuration
-- **`config-manager.sh`** - Comprehensive configuration management with persistent storage and interactive menu
-- **`setup-keyboard-shortcut.sh`** - Automated script to restore Ctrl+Alt+F12 → F16 keyboard mapping using input-remapper
+- **`key_listener.py`** - Main orchestrator: listens for native hotkeys (Ctrl/Super) and legacy F16 across all devices, records audio, calls speech processing.
+- **`speech_to_text.py`** - Audio processor: loads audio, transcribes with Whisper, handles output modes, applies intelligent text cleaning.
+- **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management.
+- **`run.sh`** - Automated setup script for dependencies and system launch.
+- **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription.
+- **`launch-large-v3.sh`** - One-command launcher for large-v3 GPU configuration.
+- **`setup-keyboard-shortcut.sh`** - Automated script to restore legacy Ctrl+Alt+F12 → F16 keyboard mapping (optional now).
 
 ### Configuration & Logs
-- **`log/`** - Dedicated directory for all system logs (gitignored)
-- **`.gitignore`** - Prevents logs, temp files, and build artifacts from being committed
-- **`requirements.txt`** - Python dependencies for the virtual environment
+- **`log/`** - Dedicated directory for all system logs (gitignored).
+- **`.gitignore`** - Prevents logs, temp files, and build artifacts from being committed.
+- **`requirements.txt`** - Python dependencies for the virtual environment.
 
 ## Defaults & Paths
-- **Hotkey**: F16 (remapped from Ctrl+Alt+F12 or Ctrl+Shift+F12 via input-remapper)
-- **Keyboard Shortcut Setup**: Use `./setup-keyboard-shortcut.sh` to restore or configure the mapping
+- **Native Shortcuts**: Double-Tap Left Control (Hold), Double-Tap Left Super (Hold)
+- **Legacy Hotkey**: F16 (remapped from Ctrl+Alt+F12 or Ctrl+Shift+F12 via input-remapper)
 - **Input Remapper Config**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **Audio File**: `/tmp/recorded_audio.wav`
 - **Log Files**: `log/key_listener.log`, `log/speech_to_text.log`
 - **Output File**: `/tmp/speech_to_text_output.txt`
 - **Python Venv**: `venv/bin/python3`
-- **ydotool Socket**: `/tmp/.ydotool_socket`
 - **GPU Model**: large-v3 (best quality, ~3GB VRAM usage)
 - **GPU Device**: cuda (GPU acceleration)
-- **Text Cleaning**: Conservative mode (preserves meaningful content)
-- **Configuration File**: `~/.config/speech-to-text/config.conf`
-- **Sound Notifications**: Enabled by default (completion sound)
-- **Desktop Notifications**: Disabled by default
 
 ## Running Instructions
 
@@ -59,288 +55,29 @@ chmod +x menu.sh
 ./menu.sh
 ```
 
-**New Menu Options:**
-- **4️⃣ 🚀 Run Large-v3 GPU (Recommended)** - Best quality with GPU acceleration and text cleaning
-- **7️⃣ 🧪 Test Large-v3 Configuration** - Verify GPU setup and model loading
-- **8️⃣ ⚙️ Configuration Management** - Manage sound vs notifications, text cleaning, and model settings
-
 ### Direct Commands
 ```bash
-# Install dependencies
-./menu.sh install
-
-# Run with auto-typing
-./menu.sh type
-
-# Run with clipboard mode (no typing)
-./menu.sh clipboard
-
-# Run large-v3 GPU configuration
-./menu.sh large-v3
-
-# Run in background
-./menu.sh background
-
-# Check system status
-./menu.sh status
-
-# Test large-v3 configuration
-./menu.sh test-large-v3
-
-# Open configuration management
-./menu.sh config
-```
-
-### Manual Execution
-```bash
-# Run as root (required for input device access)
-sudo python3 key_listener.py
-
-# Large-v3 GPU configuration
+# Launch with large-v3 GPU optimization
 sudo ./launch-large-v3.sh
-
-# Or load configuration manually
-source ./large-v3-config.sh
-python3 speech_to_text.py <audio_file>
 ```
+
+After launching, you can immediately use the **Double-Tap Control** shortcut.
 
 ## Environment Variables for Tuning
 
 ### Model Configuration
-- `STT_MODEL` (default: `large-v3`) - Whisper model size: `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3`
-- `STT_DEVICE` (default: `cuda`) - Processing device: `cpu`, `cuda`, `rocm`, `auto`
-- `STT_COMPUTE_TYPE` (default: `float16`) - Optimized for RTX 4070: `int8` on CPU, `float16` on GPU
-- `STT_BEAM_SIZE` (default: `5`) - Higher values = better accuracy, slower processing (1-5 recommended for GPU)
-- `STT_LANGUAGE` (default: `en`) - Language hint for transcription
-- `STT_VAD` (default: `1`) - Voice Activity Detection (set to `0` to disable)
-- `STT_CONDITION` (default: `1`) - Text conditioning (set to `0` for mixed-language)
-- `STT_TEMPERATURE` (default: `0.0`) - Higher values = more creative, lower = deterministic
+- `STT_MODEL` (default: `large-v3`) - Whisper model size.
+- `STT_DEVICE` (default: `cuda`) - Processing device.
+- `STT_COMPUTE_TYPE` (default: `float16`) - Optimized for RTX 4070.
+- `STT_BEAM_SIZE` (default: `5`) - Higher values = better accuracy.
 
 ### Text Cleaning Configuration
-- `STT_CLEAN_TEXT` (default: `1`) - Enable/disable text cleaning (set to `0` to disable)
-- `STT_REMOVE_FILLERS` (default: `1`) - Remove filler words like "um", "uh", "you know" (set to `0` to disable)
-- `STT_FIX_REPETITIONS` (default: `1`) - Fix stuttering and word repetitions (set to `0` to disable)
-- `STT_FIX_PUNCTUATION` (default: `1`) - Clean up excessive punctuation (set to `0` to disable)
-- `STT_MIN_SENTENCE_WORDS` (default: `2`) - Minimum words required for a sentence to be kept
-- `STT_AGGRESSIVE_CLEANING` (default: `0`) - Conservative vs aggressive cleaning mode (0 = conservative, 1 = aggressive)
-- `STT_PRESERVE_COMMON_WORDS` (default: `1`) - Preserve meaningful words like "okay", "well", "now"
-
-### Sound Notification Configuration
-- `STT_USE_SOUND` (default: `1`) - Enable sound notification when transcription is complete
-- `STT_SOUND_FILE` (default: `/usr/share/sounds/freedesktop/stereo/complete.oga`) - Path to completion sound file
-- `STT_USE_NOTIFICATION` (default: `0`) - Enable desktop notifications (disabled by default)
-
-### Example Usage
-```bash
-# Disable text cleaning completely
-export STT_CLEAN_TEXT=0
-
-# Keep fillers but fix repetitions
-export STT_REMOVE_FILLERS=0
-export STT_FIX_REPETITIONS=1
-
-# More aggressive cleaning (require longer sentences)
-export STT_MIN_SENTENCE_WORDS=3
-
-# Custom model with aggressive cleaning
-export STT_MODEL=base.en
-export STT_CLEAN_TEXT=1
-export STT_REMOVE_FILLERS=1
-export STT_FIX_REPETITIONS=1
-export STT_FIX_PUNCTUATION=1
-```
+- `STT_CLEAN_TEXT` (default: `1`) - Enable/disable text cleaning.
+- `STT_REMOVE_FILLERS` (default: `1`) - Remove filler words.
+- `STT_FIX_REPETITIONS` (default: `1`) - Fix stuttering.
 
 ### Output Mode
-- `STT_MODE` (default: `clipboard`) - Choose between `type` (auto-typing) or `clipboard` (manual pasting)
-
-## Wayland vs Xorg Typing
-
-### Auto-Typing Mode (`STT_MODE=type`)
-1. **pyautogui** (X11 sessions)
-2. **wtype** (Wayland virtual keyboard protocol)
-3. **ydotool** (Wayland daemon-based input)
-4. **Root ydotool fallback** (if user-level methods fail)
-
-### Manual Pasting Mode (`STT_MODE=clipboard`)
-- **No automatic typing**
-- Text copied to clipboard with automatic session detection: `wl-copy` on Wayland, `xclip`/`xsel` on X11
-- **X11 Support Fixed**: Now properly detects X11/Xfce4 sessions and prioritizes X11 clipboard tools
-- Desktop notification with text preview (optional, disabled by default)
-- **Sound notification** when transcription complete (enabled by default)
-- User manually pastes with Ctrl+V
-
-## Dependencies & Installation
-
-### System Packages
-- `alsa-utils` - Audio recording
-- `python3-evdev` - Input device access
-- `wl-clipboard` - Wayland clipboard management
-- `libnotify-bin` - Desktop notifications
-- `wtype` - Wayland virtual keyboard
-- `ydotool` + `ydotoold` - Wayland input simulation
-- `nvidia-driver-*` - NVIDIA GPU drivers (for CUDA acceleration)
-- `input-remapper` - Keyboard shortcut remapping (for Ctrl+Alt+F12 → F16 mapping)
-
-### Python Packages
-- `numpy` - Audio processing
-- `soundfile` - Audio file handling
-- `faster-whisper` - Whisper model inference
-- `pyautogui` - X11 input simulation
-- `torch` (CUDA-optimized) - PyTorch for GPU acceleration
-- `librosa` - Advanced audio processing (optional)
-- `scipy` - Scientific computing (optional)
-
-## Gotchas & Guidance for LLM
-
-### Common Issues
-1. **Permission Errors**: Scripts must run as root for input device access
-2. **Audio Recording**: Prefers PipeWire (`pw-record`) over ALSA (`arecord`)
-3. **Wayland Compatibility**: Virtual keyboard protocol may be disabled in GNOME
-4. **Focus Issues**: Auto-typing can type in wrong window if focus changes
-5. **Lost Keyboard Shortcut**: If Ctrl+Alt+F12 → F16 mapping is lost, run `./setup-keyboard-shortcut.sh` to restore it
-
-### Best Practices
-1. **Use Interactive Menu**: `./menu.sh` handles most setup automatically
-2. **Choose Output Mode**: Clipboard mode is more reliable for Wayland
-3. **Check Logs**: Monitor `log/` directory for troubleshooting
-4. **Test Hotkey**: Ensure F16 is properly mapped and not used by other applications
-5. **Setup Keyboard Shortcut**: Run `./setup-keyboard-shortcut.sh` if you lose your Ctrl+Alt+F12 → F16 mapping
-
-### Recent Improvements
-- **Dual Output Modes**: Clean separation between auto-typing and manual pasting
-- **Beautiful Interface**: Gum-powered interactive menu for easy management
-- **Organized Logging**: Dedicated log directory with proper gitignore
-- **Mode Respect**: Key listener now properly respects STT_MODE environment variable
-- **X11 Clipboard Fix**: Fixed clipboard functionality on X11/Xfce4 systems by adding session detection
-- **Sound Notifications**: Replaced desktop notifications with clean audio feedback
-- **Configuration Management**: Persistent user preferences with interactive configuration menu
-- **GPU Optimization**: Optimized for RTX 4070 with large-v3 model and CUDA acceleration
-- **Keyboard Shortcut Setup**: Automated script to restore Ctrl+Alt+F12 → F16 mapping using input-remapper GUI
-
-## GPU Optimization for RTX 4070
-
-The system is optimized for your **NVIDIA GeForce RTX 4070** with **12GB VRAM** and **CUDA 12.9**:
-
-### **Optimal Configuration**
-- **Model**: `large-v3` (best accuracy, ~3GB VRAM usage)
-- **Device**: `cuda` (GPU acceleration)
-- **Compute Type**: `float16` (optimal precision/speed balance)
-- **Beam Size**: `5` (better accuracy without being too slow)
-
-### **Performance Benefits**
-- **Speed**: 5-10x faster than CPU processing
-- **Accuracy**: `large-v3` model provides significantly better transcription quality
-- **Memory**: Efficient VRAM usage with float16 precision
-- **Real-time**: Near-instant transcription with GPU acceleration
-
-### **GPU Configuration Files**
-- **`gpu-config.sh`** - Load optimal GPU settings
-- **`test-gpu.sh`** - Test GPU acceleration and model loading
-- **`run.sh`** - Automated setup with GPU optimization
-- **`large-v3-config.sh`** - Dedicated large-v3 configuration
-- **`launch-large-v3.sh`** - One-command large-v3 launcher
-- **`test-large-v3.sh`** - Comprehensive large-v3 testing
-- **`download-models.sh`** - Download and test all available models
-- **`switch-model.sh`** - Easy model switching for testing
-- **`test-sound.sh`** - Sound notification testing
-- **`config-manager.sh`** - Persistent configuration management
-
-## Text Cleaning Features
-
-The system now includes intelligent text cleaning that transforms raw speech transcription into clean, readable text:
-
-### **🧹 What Gets Cleaned:**
-- **Filler words**: "um", "uh", "you know" (conservative mode)
-- **Repetitions**: "I I I think" → "I think"
-- **Stuttering**: "I-I-I think" → "I think"
-- **False starts**: Incomplete thoughts and sentence fragments
-- **Excessive punctuation**: Multiple periods, commas, or hyphens
-- **Sentence structure**: Proper capitalization and sentence endings
-
-### **⚙️ Cleaning Modes:**
-- **Conservative Mode (Default)**: Preserves meaningful words like "okay", "well", "now"
-- **Aggressive Mode**: Removes more filler words but may remove some meaningful content
-
-### **🔧 Configuration:**
-```bash
-# Conservative mode (default)
-export STT_AGGRESSIVE_CLEANING="0"
-export STT_PRESERVE_COMMON_WORDS="1"
-
-# Aggressive mode
-export STT_AGGRESSIVE_CLEANING="1"
-
-# Disable specific features
-export STT_REMOVE_FILLERS="0"        # Keep all words
-export STT_FIX_REPETITIONS="0"       # Keep repetitions
-export STT_FIX_PUNCTUATION="0"       # Keep all punctuation
-```
-
-### **📝 Example Results:**
-```
-Original: "Okay, let's try to do this. Now I'm gonna kind of... Oh no, I'm kind of rambling."
-Cleaned:  "Okay, let's try to do this. Now I'm gonna kind of. Oh no, I'm kind of rambling."
-```
-
-**Key improvements**: "Okay" preserved, "kind of" preserved, natural speech patterns maintained.
-
-### What Gets Cleaned
-- **Filler Words**: "um", "uh", "you know", "like", "basically", "actually"
-- **Repetitions**: "I I I think" → "I think", "the the the thing" → "the thing"
-- **Stuttering**: "I-I-I think" → "I think"
-- **False Starts**: Incomplete thoughts and sentence fragments
-- **Excessive Punctuation**: Multiple periods, commas, or hyphens
-- **Sentence Structure**: Proper capitalization and sentence endings
-
-### Configuration Options
-- **Disable Cleaning**: Set `STT_CLEAN_TEXT=0` to get raw transcription
-- **Customize Fillers**: Modify `STT_REMOVE_FILLERS` to control filler word removal
-- **Adjust Repetition Fixing**: Use `STT_FIX_REPETITIONS` to control stuttering fixes
-- **Punctuation Control**: Set `STT_FIX_PUNCTUATION` to manage punctuation cleaning
-- **Sentence Length**: Configure `STT_MIN_SENTENCE_WORDS` for minimum sentence length
-
-### Example Transformations
-```
-Raw: "um I I I think that um you know the the the thing is basically um actually"
-Clean: "I think that the thing is."
-```
-
-## Configuration Management System
-
-The system now includes a comprehensive configuration management system that persists user preferences:
-
-### **⚙️ Configuration Features**
-- **Persistent Storage**: Settings saved to `~/.config/speech-to-text/config.conf`
-- **Interactive Menu**: Beautiful configuration interface integrated into main menu
-- **Sound vs Notifications**: Choose between audio feedback, desktop notifications, or both
-- **Text Cleaning Presets**: Conservative vs aggressive cleaning modes
-- **Model & Performance**: Easy switching between models, devices, and settings
-- **Real-time Updates**: Changes applied immediately and persisted
-
-### **🔧 Configuration Options**
-- **Sound Notifications**: Audio feedback when transcription complete (default: enabled)
-- **Desktop Notifications**: Traditional notification popups (default: disabled)
-- **Text Cleaning Modes**: Conservative (preserves meaningful content) vs aggressive
-- **Model Selection**: Switch between tiny.en, base.en, small.en, medium.en, large-v3
-- **Device Selection**: Choose between cuda (GPU), cpu, or auto
-- **Beam Size**: Adjust accuracy vs speed trade-offs
-- **Output Mode**: Clipboard (manual pasting) vs type (auto-typing)
-
-### **📁 Configuration Files**
-- **`config-manager.sh`** - Main configuration management script
-- **`~/.config/speech-to-text/config.conf`** - Persistent user preferences
-- **Configuration Integration**: All config files now load persistent settings with fallbacks
-
-## Future Ideas
-- **Model Switching**: Runtime model selection via menu ✅ **IMPLEMENTED**
-- **Hotkey Customization**: Configurable key bindings
-- **Audio Quality**: Configurable sample rate and format
-- **Language Detection**: Automatic language identification
-- **Batch Processing**: Process multiple audio files
-- **API Integration**: Webhook notifications for processed text
-- **Voice Commands**: Execute system commands via voice
-- **Custom Models**: Fine-tuned Whisper models for specific domains
-- **Advanced Text Cleaning**: Machine learning-based sentence completion and grammar correction
+- `STT_MODE` (default: `clipboard`) - Choose between `type` (auto-typing) or `clipboard` (manual pasting).
 
 ## Troubleshooting Commands
 ```bash
@@ -351,45 +88,6 @@ The system now includes a comprehensive configuration management system that per
 tail -f log/key_listener.log
 tail -f log/speech_to_text.log
 
-# Check if ydotoold is running
-ps aux | grep ydotoold
-
-# Test hotkey detection
-sudo evtest /dev/input/event*
-
-# Verify audio recording
-pw-record --help
-arecord --help
-
-# GPU-specific troubleshooting
-./test-gpu.sh                    # Test GPU acceleration
-nvidia-smi                       # Check GPU status and memory
-source gpu-config.sh             # Load optimal GPU settings
-python3 -c "import torch; print(torch.cuda.is_available())"  # Test PyTorch CUDA
-
-# Large-v3 GPU testing
-./test-large-v3.sh               # Test large-v3 configuration
-./launch-large-v3.sh             # Launch large-v3 GPU system
-source large-v3-config.sh        # Load large-v3 configuration
-
-# Text cleaning testing
-./test-text-cleaning.sh          # Test conservative vs aggressive cleaning
-
-# Sound notification testing
-./test-sound.sh                  # Test sound notification system
-
-# Configuration management
-./config-manager.sh menu         # Open configuration menu
-./config-manager.sh show         # Show current configuration
-./config-manager.sh init         # Initialize configuration file
-
-# Keyboard shortcut setup
-./setup-keyboard-shortcut.sh     # Restore Ctrl+Alt+F12 → F16 mapping
-input-remapper-gtk               # Open input-remapper GUI manually
-input-remapper-control --command start  # Start input-remapper service
-
-# Model management
-./download-models.sh             # Download and test all models
-./switch-model.sh -l             # List available models
-./switch-model.sh -m large-v3    # Switch to large-v3 model
+# Test native keys detection (run as root)
+sudo ./venv/bin/python3 test_key_logic.py
 ```

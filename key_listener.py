@@ -5,6 +5,11 @@ Audio Recording Key Listener
 This script listens for a specific key press to start audio recording and stops on key release.
 In other words, it listens and records when the key is pressed and stops when the key is released.
 
+Triggers:
+1. F16 (Press and Hold)
+2. Left Super/Windows Key (Double Press and Hold)
+3. Left Control Key (Double Press and Hold)
+
 It is recommended to use a key (I use F16) that is not otherwise used by your system or
 applications, otherwise you may experience interference.
 
@@ -58,6 +63,7 @@ logging.basicConfig(
 
 try:
     from evdev import InputDevice, categorize, ecodes
+    import select
 except ImportError:
     print("Error: evdev library not found. Install in your venv with: pip install evdev")
     sys.exit(1)
@@ -287,6 +293,105 @@ def ensure_ydotoold_running(env: dict) -> None:
     except Exception as e:
         logging.warning(f"Could not start ydotoold: {e}")
 
+class KeyListenerLogic:
+    """State machine for key event handling."""
+    def __init__(self, on_start, on_stop):
+        self.on_start = on_start
+        self.on_stop = on_stop
+        self.recording = False
+        self.active_trigger = None # 'F16' or 'META' or 'CTRL'
+        self.last_meta_release_time = 0
+        self.last_ctrl_release_time = 0
+        self.DOUBLE_PRESS_THRESHOLD = 0.5
+
+    def handle_event(self, key_code, key_state, timestamp):
+        """
+        Handle a key event.
+        key_state: 1 for down, 0 for up.
+        """
+        # Legacy F16 support
+        if key_code == 'KEY_F16':
+            if key_state == 1: # Down
+                if not self.recording:
+                    self.on_start()
+                    self.recording = True
+                    self.active_trigger = 'F16'
+            elif key_state == 0: # Up
+                if self.recording and self.active_trigger == 'F16':
+                    self.on_stop()
+                    self.recording = False
+                    self.active_trigger = None
+                    
+        # Super Key Double Press support
+        elif key_code == 'KEY_LEFTMETA':
+            if key_state == 1: # Down
+                if not self.recording:
+                    # Check if this is the second press within threshold
+                    if (timestamp - self.last_meta_release_time) < self.DOUBLE_PRESS_THRESHOLD:
+                        logging.info("Double press detected on Super key")
+                        self.on_start()
+                        self.recording = True
+                        self.active_trigger = 'META'
+            elif key_state == 0: # Up
+                if self.recording and self.active_trigger == 'META':
+                    self.on_stop()
+                    self.recording = False
+                    self.active_trigger = None
+                elif not self.recording:
+                    self.last_meta_release_time = timestamp
+
+        # Control Key Double Press support
+        elif key_code == 'KEY_LEFTCTRL':
+            if key_state == 1: # Down
+                if not self.recording:
+                    # Check if this is the second press within threshold
+                    if (timestamp - self.last_ctrl_release_time) < self.DOUBLE_PRESS_THRESHOLD:
+                        logging.info("Double press detected on Left Control key")
+                        self.on_start()
+                        self.recording = True
+                        self.active_trigger = 'CTRL'
+            elif key_state == 0: # Up
+                if self.recording and self.active_trigger == 'CTRL':
+                    self.on_stop()
+                    self.recording = False
+                    self.active_trigger = None
+                elif not self.recording:
+                    self.last_ctrl_release_time = timestamp
+
+def _detect_all_keyboards() -> list[str]:
+    """Find all devices that look like keyboards."""
+    keyboards = []
+    
+    # First prioritize the input-remapper device
+    remapper_path = _detect_device_path_by_name(DEVICE_NAME_HINT)
+    if remapper_path:
+        keyboards.append(remapper_path)
+        
+    # Then find physical keyboards to catch keys that input-remapper might not handle yet
+    try:
+        for path in sorted(glob.glob("/dev/input/event*")):
+            if path == remapper_path:
+                continue
+                
+            try:
+                dev = InputDevice(path)
+                name = str(getattr(dev, "name", "")).lower()
+                
+                # Filter for likely keyboards
+                if "keyboard" in name or "key" in name:
+                    # Skip some common non-keyboard devices that have "key" in name
+                    if "consumer control" in name or "system control" in name:
+                        continue
+                    if "video" in name or "webcam" in name:
+                        continue
+                    keyboards.append(path)
+            except Exception:
+                continue
+    except Exception:
+        pass
+        
+    return list(dict.fromkeys(keyboards)) # Unique preserve order
+
 def main():
     """Main function."""
     # Check if running as root
@@ -297,165 +402,206 @@ def main():
     # Setup
     env = setup_environment()
     ensure_ydotoold_running(env)
-    device_path = resolve_device_path()
-    device = InputDevice(device_path)
-    recording_process = None
+    
+    # Detect all keyboard devices
+    device_paths = _detect_all_keyboards()
+    if not device_paths:
+        logging.warning(f"No keyboards detected. Falling back to default {DEVICE_PATH}")
+        device_paths = [DEVICE_PATH]
+        
+    devices = []
+    for path in device_paths:
+        try:
+            dev = InputDevice(path)
+            devices.append(dev)
+            logging.info(f"Listening on device: {path} ({dev.name})")
+        except Exception as e:
+            logging.warning(f"Failed to open {path}: {e}")
+            
+    if not devices:
+        logging.error("Could not open any input devices")
+        sys.exit(1)
 
-    logging.info(f"Listening for KEY_F16 on {device_path}")
+    # Use a mutable container for recording process to allow callbacks to modify it
+    state = {'recording_process': None}
+
+    def on_start():
+        # Start recording
+        logging.info("Starting audio recording")
+        # Run arecord as the foreground desktop user so that PipeWire/Pulse can be accessed.
+        try:
+            pw = pwd.getpwnam(USER)
+            uid = pw.pw_uid
+            gid = pw.pw_gid
+            try:
+                groups = os.getgrouplist(USER, gid)  # type: ignore[attr-defined]
+            except Exception:
+                groups = []
+
+            def demote():
+                try:
+                    if groups:
+                        os.setgroups(groups)
+                    os.setgid(gid)
+                    os.setuid(uid)
+                except Exception as e:
+                    logging.error(f"Failed to setuid/setgid for arecord: {e}")
+
+            # Prefer PipeWire's pw-record if available; otherwise use arecord via Pulse.
+            if shutil.which("pw-record"):
+                cmd = [
+                    "pw-record",
+                    "--rate", "16000",
+                    "--channels", "1",
+                    "--format", "s16",
+                    AUDIO_FILE
+                ]
+            else:
+                cmd = [
+                    "arecord",
+                    "-D", "pulse",
+                    "-f", "S16_LE",
+                    "-r", "16000",
+                    "-c", "1",
+                    AUDIO_FILE
+                ]
+
+            state['recording_process'] = subprocess.Popen(cmd, env=env, preexec_fn=demote)
+            logging.info(f"Recording started with PID {state['recording_process'].pid}")
+        except Exception as e:
+            logging.error(f"Failed to launch arecord: {e}")
+            state['recording_process'] = None
+
+    def on_stop():
+        # Stop recording and process
+        logging.info("Stopping audio recording")
+        recording_process = state['recording_process']
+        if not recording_process:
+            return
+
+        try:
+            recording_process.terminate()
+            recording_process.wait(timeout=5)
+        except Exception:
+            try:
+                recording_process.kill()
+            except Exception:
+                pass
+        logging.info(f"Recording saved to {AUDIO_FILE}")
+        state['recording_process'] = None
+
+        # Verify that audio was actually captured
+        try:
+            if not os.path.exists(AUDIO_FILE) or os.path.getsize(AUDIO_FILE) == 0:
+                logging.error("No audio captured. Skipping speech-to-text.")
+                return
+        except Exception:
+            logging.error("Could not verify recorded audio. Skipping speech-to-text.")
+            return
+
+        # Process audio
+        logging.info("Running speech-to-text")
+        # Run the speech-to-text script as the user as well
+        try:
+            pw = pwd.getpwnam(USER)
+            uid = pw.pw_uid
+            gid = pw.pw_gid
+            try:
+                groups = os.getgrouplist(USER, gid)  # type: ignore[attr-defined]
+            except Exception:
+                groups = []
+
+            def demote_stt():
+                try:
+                    if groups:
+                        os.setgroups(groups)
+                    os.setgid(gid)
+                    os.setuid(uid)
+                except Exception as e:
+                    logging.error(f"Failed to setuid/setgid for speech-to-text: {e}")
+
+            subprocess.run([
+                PYTHON_VENV,
+                SPEECHTOTEXT_SCRIPT,
+                AUDIO_FILE
+            ], env=env, check=True, preexec_fn=demote_stt)
+
+            # If ydotool exists but could not type as a user, try typing as root using the file output
+            # But only if we're in "type" mode, not "clipboard" mode
+            stt_mode = env.get("STT_MODE", "clipboard").lower()
+            if (stt_mode == "type" and
+                shutil.which("ydotool") and
+                os.path.exists("/tmp/speech_to_text_output.txt")):
+                text = None
+                try:
+                    with open("/tmp/speech_to_text_output.txt", "r", encoding="utf-8") as f:
+                        text = f.read().strip()
+                except Exception:
+                    text = None
+                # Avoid duplicate typing if the user-space method already succeeded
+                already_typed = os.path.exists("/tmp/speech_to_text_typed.ok")
+                if text and not already_typed:
+                    try:
+                        # Some compositors need a small delay before typing
+                        logging.info(f"Attempting root ydotool fallback typing for: {text[:50]}...")
+                        subprocess.run(["ydotool", "type", text + " "], check=True)
+                        logging.info("Root ydotool typing succeeded")
+                    except Exception as e:
+                        logging.warning(f"Root ydotool typing failed: {e}")
+                # Clean the marker file for next run
+                try:
+                    if os.path.exists("/tmp/speech_to_text_typed.ok"):
+                        os.remove("/tmp/speech_to_text_typed.ok")
+                except Exception:
+                    pass
+            elif stt_mode == "clipboard":
+                logging.info("Skipping root ydotool fallback (clipboard mode)")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Speech-to-text failed with exit code {e.returncode}")
+        except Exception as e:
+            logging.error(f"Could not run speech-to-text: {e}")
+        logging.info("Speech-to-text completed")
+
+
+    logic = KeyListenerLogic(on_start, on_stop)
+
+    logging.info(f"Listening for KEY_F16 or Double-Super or Double-Ctrl on {len(devices)} devices")
+
+    # Prepare file descriptors for select
+    fds = {dev.fd: dev for dev in devices}
 
     try:
-        for event in device.read_loop():
-            if event.type == ecodes.EV_KEY:
-                key = categorize(event)
+        while True:
+            r, w, x = select.select(fds, [], [])
+            for fd in r:
+                dev = fds[fd]
+                for event in dev.read():
+                    if event.type == ecodes.EV_KEY:
+                        key = categorize(event)
 
-                # Ignore key repeats
-                if key.keystate == 2:
-                    continue
-
-                if key.keycode == 'KEY_F16':
-                    if key.keystate == key.key_down and recording_process is None:
-                        # Start recording
-                        logging.info("Starting audio recording")
-                        # Run arecord as the foreground desktop user so that PipeWire/Pulse can be accessed.
-                        try:
-                            pw = pwd.getpwnam(USER)
-                            uid = pw.pw_uid
-                            gid = pw.pw_gid
-                            try:
-                                groups = os.getgrouplist(USER, gid)  # type: ignore[attr-defined]
-                            except Exception:
-                                groups = []
-
-                            def demote():
-                                try:
-                                    if groups:
-                                        os.setgroups(groups)
-                                    os.setgid(gid)
-                                    os.setuid(uid)
-                                except Exception as e:
-                                    logging.error(f"Failed to setuid/setgid for arecord: {e}")
-
-                            # Prefer PipeWire's pw-record if available; otherwise use arecord via Pulse.
-                            if shutil.which("pw-record"):
-                                cmd = [
-                                    "pw-record",
-                                    "--rate", "16000",
-                                    "--channels", "1",
-                                    "--format", "s16",
-                                    AUDIO_FILE
-                                ]
-                            else:
-                                cmd = [
-                                    "arecord",
-                                    "-D", "pulse",
-                                    "-f", "S16_LE",
-                                    "-r", "16000",
-                                    "-c", "1",
-                                    AUDIO_FILE
-                                ]
-
-                            recording_process = subprocess.Popen(cmd, env=env, preexec_fn=demote)
-                        except Exception as e:
-                            logging.error(f"Failed to launch arecord: {e}")
-                            recording_process = None
-                        logging.info(f"Recording started with PID {recording_process.pid}")
-
-                    elif key.keystate == key.key_up and recording_process:
-                        # Stop recording and process
-                        logging.info("Stopping audio recording")
-                        try:
-                            recording_process.terminate()
-                            recording_process.wait(timeout=5)
-                        except Exception:
-                            try:
-                                recording_process.kill()
-                            except Exception:
-                                pass
-                        logging.info(f"Recording saved to {AUDIO_FILE}")
-
-                        # Verify that audio was actually captured
-                        try:
-                            if not os.path.exists(AUDIO_FILE) or os.path.getsize(AUDIO_FILE) == 0:
-                                logging.error("No audio captured. Skipping speech-to-text.")
-                                recording_process = None
-                                continue
-                        except Exception:
-                            logging.error("Could not verify recorded audio. Skipping speech-to-text.")
-                            recording_process = None
+                        # Ignore key repeats
+                        if key.keystate == 2:
                             continue
-
-                        # Process audio
-                        logging.info("Running speech-to-text")
-                        # Run the speech-to-text script as the user as well
+                        
+                        # key.keystate is 1 (down) or 0 (up)
+                        # Use try/except for keycode as some specialized keys might not have standard codes
                         try:
-                            pw = pwd.getpwnam(USER)
-                            uid = pw.pw_uid
-                            gid = pw.pw_gid
-                            try:
-                                groups = os.getgrouplist(USER, gid)  # type: ignore[attr-defined]
-                            except Exception:
-                                groups = []
-
-                            def demote_stt():
-                                try:
-                                    if groups:
-                                        os.setgroups(groups)
-                                    os.setgid(gid)
-                                    os.setuid(uid)
-                                except Exception as e:
-                                    logging.error(f"Failed to setuid/setgid for speech-to-text: {e}")
-
-                            subprocess.run([
-                                PYTHON_VENV,
-                                SPEECHTOTEXT_SCRIPT,
-                                AUDIO_FILE
-                            ], env=env, check=True, preexec_fn=demote_stt)
-
-                            # If ydotool exists but could not type as a user, try typing as root using the file output
-                            # But only if we're in "type" mode, not "clipboard" mode
-                            stt_mode = env.get("STT_MODE", "clipboard").lower()
-                            if (stt_mode == "type" and
-                                shutil.which("ydotool") and
-                                os.path.exists("/tmp/speech_to_text_output.txt")):
-                                text = None
-                                try:
-                                    with open("/tmp/speech_to_text_output.txt", "r", encoding="utf-8") as f:
-                                        text = f.read().strip()
-                                except Exception:
-                                    text = None
-                                # Avoid duplicate typing if the user-space method already succeeded
-                                already_typed = os.path.exists("/tmp/speech_to_text_typed.ok")
-                                if text and not already_typed:
-                                    try:
-                                        # Some compositors need a small delay before typing
-                                        logging.info(f"Attempting root ydotool fallback typing for: {text[:50]}...")
-                                        subprocess.run(["ydotool", "type", text + " "], check=True)
-                                        logging.info("Root ydotool typing succeeded")
-                                    except Exception as e:
-                                        logging.warning(f"Root ydotool typing failed: {e}")
-                                # Clean the marker file for next run
-                                try:
-                                    if os.path.exists("/tmp/speech_to_text_typed.ok"):
-                                        os.remove("/tmp/speech_to_text_typed.ok")
-                                except Exception:
-                                    pass
-                            elif stt_mode == "clipboard":
-                                logging.info("Skipping root ydotool fallback (clipboard mode)")
-                        except subprocess.CalledProcessError as e:
-                            logging.error(f"Speech-to-text failed with exit code {e.returncode}")
-                        except Exception as e:
-                            logging.error(f"Could not run speech-to-text: {e}")
-                        logging.info("Speech-to-text completed")
-
-                        recording_process = None
+                            if isinstance(key.keycode, list):
+                                code = key.keycode[0]
+                            else:
+                                code = key.keycode
+                            logic.handle_event(code, key.keystate, time.time())
+                        except Exception:
+                            pass
 
     except KeyboardInterrupt:
         logging.info("Shutting down due to keyboard interrupt")
-        if recording_process:
-            recording_process.terminate()
+        if state['recording_process']:
+            state['recording_process'].terminate()
     except Exception as e:
         logging.error(f"Error: {e}")
+        import traceback
+        logging.error(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
-

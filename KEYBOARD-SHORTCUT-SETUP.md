@@ -14,6 +14,33 @@ This script will:
 3. ✅ Start input-remapper service
 4. ✅ Open the GUI for final configuration
 
+## Native "Double-Tap" Shortcuts (New)
+
+As an alternative to the F16 mapping, the system now supports two macOS-style dictation shortcuts:
+
+### Option A: Double-Tap Super (Windows Key)
+1. **Press the Super (Windows) key twice.**
+2. **On the second press, HOLD the key down.**
+3. **Speak while holding the key.**
+4. **Release the key to stop recording.**
+
+### Option B: Double-Tap Left Control
+1. **Press the Left Control key twice.**
+2. **On the second press, HOLD the key down.**
+3. **Speak while holding the key.**
+4. **Release the key to stop recording.**
+
+These work natively and can be used alongside or instead of the F16 mapping. Double-Control is often more reliable if the Super key is intercepted by the desktop environment.
+
+### Multi-Device Support
+The system now listens on **all connected keyboards** simultaneously. This means you can use:
+- Your laptop keyboard
+- An external USB keyboard
+- A Bluetooth keyboard
+- The virtual input-remapper device (for F16)
+
+It intelligently merges input from all sources, so you can even double-tap Control on one keyboard and hold it on another (though that would be weird).
+
 ## Manual Setup (Alternative)
 
 If you prefer to set it up manually:
@@ -82,4 +109,3 @@ input-remapper-control --command start
 - You may need to run `sudo ./launch-large-v3.sh` as root for key detection
 - If Ctrl+Alt+F12 doesn't work, try restarting input-remapper service
 - For Xfce/X11, input-remapper works reliably for key combination mapping
-
