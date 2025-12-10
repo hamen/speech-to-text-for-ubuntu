@@ -13,7 +13,7 @@
 
 ## How It Works (High-Level)
 1. **Push-to-Talk Recording**: User triggers recording via one of multiple methods:
-   - **Native Double-Tap**: Double-tap and hold **Left Control** or **Left Super**.
+   - **Native Double-Tap**: Double-tap and hold **Left Control**. **Left Super** is optional and disabled by default via config.
    - **Legacy Hotkey**: Press and hold **F16** (often remapped from a mouse button).
 2. **Input Detection**: The system listens on **all connected keyboards** simultaneously, ensuring robust detection regardless of remapping tools.
 3. **Audio Processing**: System records audio using `pw-record` (PipeWire) or `arecord` (ALSA).
@@ -40,10 +40,7 @@
 - **`speech_to_text.py`** - Audio processor: loads audio, connects to STT server for transcription, handles output modes, applies intelligent text cleaning.
 - **`stt_server.py`** - **Persistent model server**: keeps Whisper model in memory, handles transcription requests via Unix socket for instant response.
 - **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management. Automatically starts the persistent server.
-- **`run.sh`** - Automated setup script for dependencies and system launch.
 - **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
-- **`launch-large-v3.sh`** - One-command launcher for large-v3 GPU configuration.
-- **`setup-keyboard-shortcut.sh`** - Automated script to restore legacy Ctrl+Alt+F12 → F16 keyboard mapping (optional now).
 
 ### Configuration & Logs
 - **`log/`** - Dedicated directory for all system logs (gitignored).
@@ -51,7 +48,7 @@
 - **`requirements.txt`** - Python dependencies for the virtual environment.
 
 ## Defaults & Paths
-- **Native Shortcuts**: Double-Tap Left Control (Hold), Double-Tap Left Super (Hold)
+- **Native Shortcuts**: Double-Tap Left Control (Hold). Double-Tap Left Super (Hold) is available but disabled by default.
 - **Legacy Hotkey**: F16 (remapped from Ctrl+Alt+F12 or Ctrl+Shift+F12 via input-remapper)
 - **Input Remapper Config**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **STT Server Socket**: `/tmp/stt_server.sock`
@@ -73,8 +70,7 @@ chmod +x menu.sh
 
 ### Direct Commands
 ```bash
-# Launch with large-v3 GPU optimization
-sudo ./launch-large-v3.sh
+sudo -E python3 key_listener.py
 ```
 
 After launching, you can immediately use the **Double-Tap Control** shortcut.
@@ -95,6 +91,7 @@ After launching, you can immediately use the **Double-Tap Control** shortcut.
 
 ### Output Mode
 - `STT_MODE` (default: `clipboard`) - Choose between `type` (auto-typing) or `clipboard` (manual pasting).
+- `STT_ENABLE_DOUBLE_SUPER` (default: `0`) - Set to `1` to allow the double-Super hotkey.
 
 ## Troubleshooting Commands
 ```bash

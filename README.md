@@ -4,7 +4,7 @@ A powerful Python project that provides **push-to-talk speech recognition** usin
 
 **🎯 Key Features:**
 - **Push-to-talk recording** - Press and hold to record, release to process
-- **Native Keyboard Shortcuts** - Works out of the box with **Double-Control** or **Double-Super** keys
+- **Native Keyboard Shortcuts** - **Double-Control** by default; optional **Double-Super** toggle in config
 - **⚡ Persistent Model Server** - Model stays in memory for **instant transcription** (~0.4s instead of ~2.6s)
 - **🌍 Multilingual Support** - 99 languages with automatic detection (Italian, English, Spanish, etc.)
 - **Multiple output modes** - Choose between automatic typing or clipboard + notification
@@ -22,7 +22,7 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 - **key_listener.py**: Monitors keyboard devices for dictation shortcuts. Now supports listening on **all connected keyboards** simultaneously, making it robust against remapping tools and different hardware.
 - **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Automatically uses the persistent server when available for instant transcription.
 - **stt_server.py**: **Persistent model server** that keeps the Whisper model loaded in memory. Eliminates the ~2 second model loading time for each transcription request.
-- **menu.sh**: Beautiful interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for easy setup, mode selection, and system management. Automatically starts the persistent server.
+- **menu.sh**: Interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for setup, mode selection, and system management. Automatically starts the persistent server.
 - **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
 
 ## 🎤 Keyboard Shortcuts
@@ -30,17 +30,16 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 The system now supports multiple ways to trigger dictation. You can use whichever is most comfortable for you:
 
 ### 1. Native "Double-Tap" Shortcuts (Recommended)
-These work out of the box without any complex remapping:
+These work out of the box without remapping:
 
-- **Double-Tap Left Control**: Press `Left Ctrl`, Release, then Press & **Hold** `Left Ctrl`.
+- **Double-Tap Left Control**: Press `Left Ctrl`, release, then press & **hold** `Left Ctrl`.
   - Speak while holding. Release to transcribe.
-- **Double-Tap Super (Windows)**: Press `Super`, Release, then Press & **Hold** `Super`.
-  - Speak while holding. Release to transcribe.
+- **Double-Tap Super (Windows)**: Optional and **disabled by default**; enable via config and then press `Super`, release, then press & **hold** `Super`.
 
 ### 2. Legacy F16 Shortcut
 For backward compatibility or if you prefer remapping a specific key (like a mouse button):
 - **Key**: F16
-- **Setup**: Use `./setup-keyboard-shortcut.sh` to map keys like `Ctrl+Alt+F12` to F16 using `input-remapper`.
+- **Setup**: Use your preferred tool (e.g., input-remapper) to map a key to F16.
 
 ## Setup
 
@@ -65,16 +64,15 @@ The menu will guide you through:
 4. **Running the System** - Start in foreground or background
 5. **System Status** - Check what's running and troubleshoot issues
 
-### Option 2: Large-v3 GPU Configuration (Recommended for RTX 4070)
+### Option 2: Direct launch (power users)
 
-For maximum quality transcription with GPU acceleration:
+If you prefer to skip the menu, export your desired `STT_` settings (see Advanced configuration) and run:
 
 ```bash
-# Launch with large-v3 GPU optimization
-sudo ./launch-large-v3.sh
+sudo -E python3 key_listener.py
 ```
 
-This will start the key listener. You can then immediately use **Double-Tap Left Control** to dictate!
+You can then immediately use **Double-Tap Left Control** to dictate.
 
 ## Requirements
 
@@ -104,24 +102,12 @@ This will start the key listener. You can then immediately use **Double-Tap Left
 ### Manual Execution
 ```bash
 # Run as root (required to listen to input devices)
-sudo ./launch-large-v3.sh
+sudo -E python3 key_listener.py
 
-# Then use one of the shortcuts:
-# 1. Double-tap and hold Left Control
-# 2. Double-tap and hold Left Super
-# 3. Press and hold F16
-```
-
-### GPU-Optimized Configuration
-
-For users with NVIDIA GPUs (especially RTX 4070), the system provides optimized configurations:
-
-```bash
-# Load optimal GPU settings
-source ./gpu-config.sh
-
-# Test GPU acceleration
-./test-gpu.sh
+# Shortcuts:
+# 1. Double-tap and hold Left Control (default)
+# 2. Double-tap and hold Left Super (enable via config)
+# 3. Press and hold F16 (if you have remapped a key to F16)
 ```
 
 ## How it Works
@@ -174,7 +160,7 @@ The system includes intelligent text cleaning that transforms raw speech transcr
 
 ## Advanced configuration (environment variables)
 
-You can tweak accuracy/latency and platform settings without changing code. Set these env vars when launching `run.sh` or `key_listener.py`.
+You can tweak accuracy/latency and platform settings without changing code. Set these env vars when launching `menu.sh` (it will export from your config) or when running `sudo -E python3 key_listener.py`.
 
 ### Model Configuration
 - `STT_MODEL` (default: `large-v3`) — examples: `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3`.
@@ -196,7 +182,7 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 
 ### Wayland Notes
 - On GNOME Wayland the virtual keyboard protocol may be disabled by default; enable it in settings or rely on clipboard+notification.
-- If `ydotool` is installed and `ydotoold` is available, the system will use it for more reliable typing. `run.sh` tries to start `ydotoold` on `/tmp/.ydotoool_socket` with relaxed permissions.
+- If `ydotool` is installed and `ydotoold` is available, the system will use it for more reliable typing. `menu.sh` will start `ydotoold` when needed.
 
 ### X11/Xfce4 Support
 - **✅ Clipboard Fixed**: X11/Xfce4 clipboard functionality now works correctly with automatic session detection

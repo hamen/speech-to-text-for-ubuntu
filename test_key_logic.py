@@ -7,6 +7,7 @@ class TestKeyLogic(unittest.TestCase):
     def setUp(self):
         self.on_start = MagicMock()
         self.on_stop = MagicMock()
+        # Default: Double-Super is disabled
         self.logic = KeyListenerLogic(self.on_start, self.on_stop)
 
     def test_f16_normal_behavior(self):
@@ -31,7 +32,7 @@ class TestKeyLogic(unittest.TestCase):
         self.on_start.assert_not_called()
         self.on_stop.assert_not_called()
 
-    def test_super_double_press_activates(self):
+    def test_super_double_press_disabled_by_default(self):
         t = time.time()
         
         # Press 1
@@ -42,27 +43,43 @@ class TestKeyLogic(unittest.TestCase):
         # Press 2 (within 0.5s)
         self.logic.handle_event('KEY_LEFTMETA', 1, t + 0.3)
         
-        self.on_start.assert_called_once()
-        self.assertTrue(self.logic.recording)
-        
-        # Release 2
-        self.logic.handle_event('KEY_LEFTMETA', 0, t + 1.0)
-        self.on_stop.assert_called_once()
+        self.on_start.assert_not_called()
         self.assertFalse(self.logic.recording)
 
-    def test_super_slow_double_press_ignores(self):
+    def test_super_double_press_activates_when_enabled(self):
+        logic = KeyListenerLogic(self.on_start, self.on_stop, enable_double_super=True)
         t = time.time()
         
         # Press 1
-        self.logic.handle_event('KEY_LEFTMETA', 1, t)
+        logic.handle_event('KEY_LEFTMETA', 1, t)
         # Release 1
-        self.logic.handle_event('KEY_LEFTMETA', 0, t + 0.1)
+        logic.handle_event('KEY_LEFTMETA', 0, t + 0.1)
+        
+        # Press 2 (within 0.5s)
+        logic.handle_event('KEY_LEFTMETA', 1, t + 0.3)
+        
+        self.on_start.assert_called_once()
+        self.assertTrue(logic.recording)
+        
+        # Release 2
+        logic.handle_event('KEY_LEFTMETA', 0, t + 1.0)
+        self.on_stop.assert_called_once()
+        self.assertFalse(logic.recording)
+
+    def test_super_slow_double_press_ignores_when_enabled(self):
+        logic = KeyListenerLogic(self.on_start, self.on_stop, enable_double_super=True)
+        t = time.time()
+        
+        # Press 1
+        logic.handle_event('KEY_LEFTMETA', 1, t)
+        # Release 1
+        logic.handle_event('KEY_LEFTMETA', 0, t + 0.1)
         
         # Press 2 (after 1.0s, > threshold)
-        self.logic.handle_event('KEY_LEFTMETA', 1, t + 1.2)
+        logic.handle_event('KEY_LEFTMETA', 1, t + 1.2)
         
         self.on_start.assert_not_called()
-        self.assertFalse(self.logic.recording)
+        self.assertFalse(logic.recording)
 
     def test_ctrl_double_press_activates(self):
         t = time.time()

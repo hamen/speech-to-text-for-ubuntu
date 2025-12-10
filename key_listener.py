@@ -7,7 +7,7 @@ In other words, it listens and records when the key is pressed and stops when th
 
 Triggers:
 1. F16 (Press and Hold)
-2. Left Super/Windows Key (Double Press and Hold)
+2. Left Super/Windows Key (Double Press and Hold) — optional, disabled by default
 3. Left Control Key (Double Press and Hold)
 
 It is recommended to use a key (I use F16) that is not otherwise used by your system or
@@ -121,6 +121,14 @@ SPEECHTOTEXT_SCRIPT = os.path.join(REPO_DIR, "speech_to_text.py")
 
 # Your python virtual environment (local venv in this repo)
 PYTHON_VENV = os.path.join(REPO_DIR, "venv", "bin", "python3")
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    """Return True if the environment variable looks truthy."""
+    return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
+
+
+ENABLE_DOUBLE_SUPER = _env_flag("STT_ENABLE_DOUBLE_SUPER", "0")
 
 def _read_environ_vars_from_process(pid: str) -> dict:
     """Read environment variables from a process's /proc/<pid>/environ.
@@ -295,7 +303,7 @@ def ensure_ydotoold_running(env: dict) -> None:
 
 class KeyListenerLogic:
     """State machine for key event handling."""
-    def __init__(self, on_start, on_stop):
+    def __init__(self, on_start, on_stop, enable_double_super: bool = False):
         self.on_start = on_start
         self.on_stop = on_stop
         self.recording = False
@@ -303,6 +311,7 @@ class KeyListenerLogic:
         self.last_meta_release_time = 0
         self.last_ctrl_release_time = 0
         self.DOUBLE_PRESS_THRESHOLD = 0.5
+        self.enable_double_super = enable_double_super
 
     def handle_event(self, key_code, key_state, timestamp):
         """
@@ -322,8 +331,10 @@ class KeyListenerLogic:
                     self.recording = False
                     self.active_trigger = None
                     
-        # Super Key Double Press support
+        # Super Key Double Press support (optional)
         elif key_code == 'KEY_LEFTMETA':
+            if not self.enable_double_super:
+                return
             if key_state == 1: # Down
                 if not self.recording:
                     # Check if this is the second press within threshold
@@ -563,9 +574,12 @@ def main():
         logging.info("Speech-to-text completed")
 
 
-    logic = KeyListenerLogic(on_start, on_stop)
+    logic = KeyListenerLogic(on_start, on_stop, enable_double_super=ENABLE_DOUBLE_SUPER)
 
-    logging.info(f"Listening for KEY_F16 or Double-Super or Double-Ctrl on {len(devices)} devices")
+    active_triggers = ["KEY_F16", "Double-Ctrl"]
+    if logic.enable_double_super:
+        active_triggers.insert(1, "Double-Super")
+    logging.info(f"Listening for {' or '.join(active_triggers)} on {len(devices)} devices")
 
     # Prepare file descriptors for select
     fds = {dev.fd: dev for dev in devices}

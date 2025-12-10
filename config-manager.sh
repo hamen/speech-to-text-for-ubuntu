@@ -20,6 +20,7 @@ DEFAULT_CONFIG=(
     "STT_DEVICE=cuda"
     "STT_COMPUTE_TYPE=float16"
     "STT_BEAM_SIZE=5"
+    "STT_ENABLE_DOUBLE_SUPER=0"
 )
 
 # Colors for output
@@ -122,12 +123,13 @@ config_menu() {
         echo "1️⃣  Sound vs Notification Settings"
         echo "2️⃣  Text Cleaning Settings"
         echo "3️⃣  Model & Performance Settings"
-        echo "4️⃣  Show Current Configuration"
-        echo "5️⃣  Reset to Defaults"
-        echo "6️⃣  Back to Main Menu"
+        echo "4️⃣  Hotkey Settings"
+        echo "5️⃣  Show Current Configuration"
+        echo "6️⃣  Reset to Defaults"
+        echo "7️⃣  Back to Main Menu"
         echo ""
 
-        local choice=$(gum choose "1️⃣ Sound/Notification" "2️⃣ Text Cleaning" "3️⃣ Model Settings" "4️⃣ Show Config" "5️⃣ Reset Defaults" "6️⃣ Back")
+        local choice=$(gum choose "1️⃣ Sound/Notification" "2️⃣ Text Cleaning" "3️⃣ Model Settings" "4️⃣ Hotkey Settings" "5️⃣ Show Config" "6️⃣ Reset Defaults" "7️⃣ Back")
 
         case "$choice" in
             "1️⃣ Sound/Notification")
@@ -139,13 +141,16 @@ config_menu() {
             "3️⃣ Model Settings")
                 model_settings_menu
                 ;;
-            "4️⃣ Show Config")
+            "4️⃣ Hotkey Settings")
+                hotkey_settings_menu
+                ;;
+            "5️⃣ Show Config")
                 show_config
                 ;;
-            "5️⃣ Reset Defaults")
+            "6️⃣ Reset Defaults")
                 reset_config
                 ;;
-            "6️⃣ Back")
+            "7️⃣ Back")
                 break
                 ;;
         esac
@@ -203,6 +208,35 @@ sound_notification_menu() {
                 custom_sound_menu
                 ;;
             "6️⃣ Back")
+                break
+                ;;
+        esac
+    done
+}
+
+# Hotkey configuration menu
+hotkey_settings_menu() {
+    while true; do
+        echo ""
+        echo "🎹 Hotkey Settings"
+        echo "=================="
+        echo "Current: Double-Super=${STT_ENABLE_DOUBLE_SUPER:-0} (1 = enabled, 0 = disabled)"
+        echo ""
+
+        local choice=$(gum choose "Enable Double-Super" "Disable Double-Super" "Back")
+
+        case "$choice" in
+            "Enable Double-Super")
+                save_config "STT_ENABLE_DOUBLE_SUPER" "1"
+                export STT_ENABLE_DOUBLE_SUPER=1
+                show_success "Double-Super hotkey enabled"
+                ;;
+            "Disable Double-Super")
+                save_config "STT_ENABLE_DOUBLE_SUPER" "0"
+                export STT_ENABLE_DOUBLE_SUPER=0
+                show_success "Double-Super hotkey disabled (recommended)"
+                ;;
+            "Back")
                 break
                 ;;
         esac

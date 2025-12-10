@@ -7,6 +7,17 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 export YDOTOOL_SOCKET="/tmp/.ydotool_socket"
+CONFIG_FILE="$HOME/.config/speech-to-text/config.conf"
+
+load_persistent_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        # Export every variable loaded from config so sudo -E preserves them
+        set -a
+        # shellcheck disable=SC1090
+        source "$CONFIG_FILE"
+        set +a
+    fi
+}
 
 # Colors and styling
 show_title() {
@@ -120,6 +131,7 @@ start_ydotoold() {
 run_with_typing() {
     show_subtitle "Running with Auto-Typing"
     show_info "This mode will automatically type transcribed text into the focused window."
+    load_persistent_config
 
     if gum confirm "Start speech-to-text with auto-typing?"; then
         start_ydotoold
@@ -137,6 +149,7 @@ run_with_typing() {
 run_with_clipboard() {
     show_subtitle "Running with Manual Pasting"
     show_info "This mode will copy transcribed text to clipboard and notify you to paste manually."
+    load_persistent_config
 
     if gum confirm "Start speech-to-text with clipboard mode?"; then
         start_ydotoold
@@ -155,6 +168,7 @@ run_with_clipboard() {
 run_large_v3_gpu() {
     show_subtitle "🚀 Large-v3 GPU Configuration"
     show_info "Best quality transcription using large-v3 model with GPU acceleration, manual pasting, and intelligent text cleaning."
+    load_persistent_config
 
     # Check if GPU is available
     if ! command -v nvidia-smi &> /dev/null; then
@@ -312,6 +326,7 @@ run_large_v3_gpu() {
 
 run_background() {
     show_subtitle "Running in Background"
+    load_persistent_config
 
     local mode_choice=$(gum choose \
         "Auto-typing mode" \
