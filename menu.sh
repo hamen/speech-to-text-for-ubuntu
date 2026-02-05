@@ -324,6 +324,78 @@ run_large_v3_gpu() {
     fi
 }
 
+run_large_v3_cpu() {
+    show_subtitle "💻 Large-v3 CPU Configuration"
+    show_info "Best quality transcription using large-v3 model on CPU. Saves GPU memory at the cost of slower processing."
+    load_persistent_config
+
+    if gum confirm "Launch Large-v3 CPU Speech-to-Text System?"; then
+        start_ydotoold
+
+        echo "🎯 Loading Large-v3 CPU Configuration..."
+
+        # Activate virtual environment
+        if [[ -f "$REPO_DIR/venv/bin/activate" ]]; then
+            source "$REPO_DIR/venv/bin/activate"
+        fi
+
+        # Load the CPU configuration
+        if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
+            source "$REPO_DIR/large-v3-cpu-config.sh"
+            echo "✅ Configuration loaded successfully"
+        else
+            echo "⚠️  large-v3-cpu-config.sh not found, using defaults"
+            export STT_MODEL="large-v3"
+            export STT_DEVICE="cpu"
+            export STT_COMPUTE_TYPE="int8"
+            export STT_BEAM_SIZE="5"
+            export STT_LANGUAGE="auto"
+            export STT_MODE="clipboard"
+            export STT_CLEAN_TEXT="1"
+        fi
+
+        echo "🚀 Launching Large-v3 CPU STT System..."
+        
+        # Start persistent STT server in background
+        pkill -f "python3.*stt_server.py" 2>/dev/null || true
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
+        
+        STT_MODEL="$STT_MODEL" \
+        STT_DEVICE="$STT_DEVICE" \
+        STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
+        STT_BEAM_SIZE="$STT_BEAM_SIZE" \
+        STT_LANGUAGE="$STT_LANGUAGE" \
+        nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_server.py" >> "$REPO_DIR/log/stt_server.log" 2>&1 &
+        
+        SERVER_PID=$!
+        
+        # Wait for server
+        for i in {1..60}; do
+            if [[ -S /tmp/stt_server.sock ]]; then
+                echo "✅ STT server ready!"
+                break
+            fi
+            sleep 1
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+                echo "❌ Server failed to start."
+                return 1
+            fi
+        done
+
+        sudo STT_MODEL="$STT_MODEL" \
+             STT_DEVICE="$STT_DEVICE" \
+             STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
+             STT_BEAM_SIZE="$STT_BEAM_SIZE" \
+             STT_LANGUAGE="$STT_LANGUAGE" \
+             STT_MODE="$STT_MODE" \
+             STT_CLEAN_TEXT="$STT_CLEAN_TEXT" \
+             python3 "$REPO_DIR/key_listener.py"
+        
+        pkill -f "python3.*stt_server.py" 2>/dev/null || true
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
+    fi
+}
+
 run_background() {
     show_subtitle "Running in Background"
     load_persistent_config
@@ -332,6 +404,7 @@ run_background() {
         "Auto-typing mode" \
         "Clipboard mode" \
         "Large-v3 GPU mode" \
+        "Large-v3 CPU mode" \
         "Cancel")
 
     case "$mode_choice" in
@@ -362,6 +435,20 @@ run_background() {
 
             nohup sudo -E python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
             echo "✅ Large-v3 GPU key listener started in background (PID: $!)"
+            echo "   Logs: $REPO_DIR/log/key_listener.log"
+            echo "   To stop: sudo pkill -f 'python3 key_listener.py'"
+            ;;
+        "Large-v3 CPU mode")
+            start_ydotoold
+            echo "🔄 Starting Large-v3 CPU key listener in background..."
+
+            # Load configuration for background mode
+            if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
+                source "$REPO_DIR/large-v3-cpu-config.sh"
+            fi
+
+            nohup sudo -E python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
+            echo "✅ Large-v3 CPU key listener started in background (PID: $!)"
             echo "   Logs: $REPO_DIR/log/key_listener.log"
             echo "   To stop: sudo pkill -f 'python3 key_listener.py'"
             ;;
@@ -425,11 +512,17 @@ check_status() {
         fi
     done
 
-    # Check for large-v3 configuration
+    # Check for large-v3 configurations
     if [[ -f "$REPO_DIR/large-v3-config.sh" ]]; then
-        echo "   ✅ large-v3-config.sh"
+        echo "   ✅ large-v3-config.sh (GPU)"
     else
-        echo "   ❌ large-v3-config.sh"
+        echo "   ❌ large-v3-config.sh (GPU)"
+    fi
+
+    if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
+        echo "   ✅ large-v3-cpu-config.sh (CPU)"
+    else
+        echo "   ❌ large-v3-cpu-config.sh (CPU)"
     fi
 
     echo
@@ -901,6 +994,7 @@ Available Modes:
 1. Auto-typing: Text appears automatically in focused window
 2. Clipboard: Text copied to clipboard with notification
 3. Large-v3 GPU: Best quality with GPU acceleration + text cleaning
+4. Large-v3 CPU: Best quality on CPU (saves GPU memory, slower processing)
 
 Hotkey: Shift+Ctrl+F12 (mapped to F16)
 • Press and hold to record
@@ -929,13 +1023,14 @@ main_menu() {
             "2️⃣ Run with Auto-Typing" \
             "3️⃣ Run with Manual Pasting" \
             "4️⃣ 🚀 Run Large-v3 GPU (Recommended)" \
-            "5️⃣ Run in Background" \
-            "6️⃣ Check System Status" \
-            "7️⃣ 🛑 Stop Background Service" \
-            "8️⃣ 🧪 Test Large-v3 Configuration" \
-            "9️⃣ ⚙️  Configuration Management" \
-            "🔟 Help & Information" \
-            "1️⃣1️⃣ Exit")
+            "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)" \
+            "6️⃣ Run in Background" \
+            "7️⃣ Check System Status" \
+            "8️⃣ 🛑 Stop Background Service" \
+            "9️⃣ 🧪 Test Large-v3 Configuration" \
+            "🔟 ⚙️  Configuration Management" \
+            "1️⃣1️⃣ Help & Information" \
+            "1️⃣2️⃣ Exit")
 
         case "$choice" in
             "1️⃣ Install Dependencies")
@@ -950,25 +1045,28 @@ main_menu() {
             "4️⃣ 🚀 Run Large-v3 GPU (Recommended)")
                 run_large_v3_gpu
                 ;;
-            "5️⃣ Run in Background")
+            "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)")
+                run_large_v3_cpu
+                ;;
+            "6️⃣ Run in Background")
                 run_background
                 ;;
-            "6️⃣ Check System Status")
+            "7️⃣ Check System Status")
                 check_status
                 ;;
-            "7️⃣ 🛑 Stop Background Service")
+            "8️⃣ 🛑 Stop Background Service")
                 kill_background_service
                 ;;
-            "8️⃣ 🧪 Test Large-v3 Configuration")
+            "9️⃣ 🧪 Test Large-v3 Configuration")
                 test_large_v3
                 ;;
-            "9️⃣ ⚙️  Configuration Management")
+            "🔟 ⚙️  Configuration Management")
                 manage_configuration
                 ;;
-            "🔟 Help & Information")
+            "1️⃣1️⃣ Help & Information")
                 show_help
                 ;;
-            "1️⃣1️⃣ Exit")
+            "1️⃣2️⃣ Exit")
                 echo "👋 Goodbye!"
                 exit 0
                 ;;
@@ -989,6 +1087,9 @@ case "${1:-}" in
         ;;
     large-v3)
         run_large_v3_gpu
+        ;;
+    large-v3-cpu)
+        run_large_v3_cpu
         ;;
     background)
         run_background
