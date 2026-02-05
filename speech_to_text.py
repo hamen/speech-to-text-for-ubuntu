@@ -115,36 +115,97 @@ def clean_transcribed_text(text: str) -> str:
         text = re.sub(r'[-]{2,}', '-', text)     # Multiple hyphens
 
     # Step 6: Intelligent sentence structure improvement
-    # Split by sentence endings but be more careful
-    sentences = re.split(r'[.!?]+', text)
+    # Split by sentence endings but preserve them if possible
+    # We use a lookahead/lookbehind to keep the punctuation with the sentence
+    parts = re.split(r'([.!?]+)', text)
+    
+    # Reconstruct sentences with their punctuation
+    raw_sentences = []
+    for i in range(0, len(parts)-1, 2):
+        raw_sentences.append(parts[i].strip() + parts[i+1])
+    # Add the last part if it doesn't have punctuation
+    if len(parts) % 2 != 0 and parts[-1].strip():
+        raw_sentences.append(parts[-1].strip())
+
     cleaned_sentences = []
+    
+    # Common English question starters
+    question_starters = [
+        'who', 'what', 'where', 'when', 'why', 'how', 
+        'is', 'are', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 
+        'will', 'shall', 'may', 'might', 'must', 'am', 'was', 'were', 'have', 'has', 'had',
+        'isn\'t', 'aren\'t', 'don\'t', 'doesn\'t', 'didn\'t', 'can\'t', 'couldn\'t', 
+        'shouldn\'t', 'wouldn\'t', 'won\'t'
+    ]
+    
+    # Phrases that often precede a question
+    question_lead_ins = [
+        r'my question is',
+        r'i was wondering',
+        r'i want to know',
+        r'tell me',
+        r'can you tell me',
+        r'do you know',
+    ]
 
-    for sentence in sentences:
+    for sentence in raw_sentences:
         sentence = sentence.strip()
-        if sentence:
-            # Only remove very obvious incomplete fragments
-            words = sentence.split()
+        if not sentence:
+            continue
+            
+        # Check if sentence already has terminal punctuation
+        has_punctuation = sentence[-1] in '.!?'
+        clean_sentence = sentence[:-1].strip() if has_punctuation else sentence
+        
+        words = clean_sentence.split()
+        if not words:
+            continue
 
-            # Keep sentences with meaningful content
-            if len(words) >= STT_MIN_SENTENCE_WORDS:
-                # Additional check: don't remove sentences that start with common words
-                if not re.match(r'^(and|but|or|so|then|well|okay|now|yes|no|oh|ah|um|uh)$', words[0], re.IGNORECASE):
-                    cleaned_sentences.append(sentence)
-                elif len(words) >= 3:  # Allow short sentences if they start with common words
-                    cleaned_sentences.append(sentence)
-            elif len(words) == 1 and words[0].lower() in ['okay', 'well', 'now', 'yes', 'no']:
-                # Keep single meaningful words
-                cleaned_sentences.append(sentence)
+        # Keep most sentences, only remove very short non-meaningful fragments
+        should_keep = True
+        if len(words) < STT_MIN_SENTENCE_WORDS:
+            # Single word sentences must be in our meaningful list
+            meaningful_single_words = [
+                'okay', 'well', 'now', 'yes', 'no', 'hello', 'hi', 'hey', 
+                'thanks', 'thank', 'bye', 'goodbye', 'ciao', 'prego'
+            ]
+            if words[0].lower() not in meaningful_single_words:
+                should_keep = False
+        
+        if should_keep:
+            # Step 6b: Question detection (primarily for English)
+            # If it starts with a question word and doesn't have a question mark
+            is_question = False
+            
+            # Simple start-of-sentence check
+            if words[0].lower() in question_starters:
+                is_question = True
+            else:
+                # Check for lead-in phrases followed by a question word
+                # e.g., "My question is, can you..."
+                lower_sentence = clean_sentence.lower()
+                for lead_in in question_lead_ins:
+                    # Match lead-in followed by optional punctuation/space and then a question word
+                    pattern = rf'^{lead_in}[,\s]+({"|".join(question_starters)})\b'
+                    if re.search(pattern, lower_sentence):
+                        is_question = True
+                        break
+            
+            if is_question:
+                if not sentence.endswith('?'):
+                    sentence = clean_sentence + '?'
+            elif not has_punctuation:
+                sentence = clean_sentence + '.'
+            
+            cleaned_sentences.append(sentence)
 
-    # Rejoin sentences with proper punctuation
+    # Rejoin sentences
     if cleaned_sentences:
-        text = '. '.join(cleaned_sentences)
-        if text and not text.endswith('.'):
-            text += '.'
+        text = ' '.join(cleaned_sentences)
     else:
         # If we removed everything, keep the original but clean it up
         text = text.strip()
-        if text and not text.endswith('.'):
+        if text and not text.endswith(('.', '!', '?')):
             text += '.'
 
     # Step 7: Clean up extra whitespace
@@ -282,7 +343,7 @@ def transcribe_audio(audio, audio_file: str = None):
         beam_size = int(os.environ.get("STT_BEAM_SIZE", "1"))
         vad_filter = os.environ.get("STT_VAD", "1").lower() in ("1", "true", "yes")
         language_raw = os.environ.get("STT_LANGUAGE", "en")
-        language = None if language_raw.lower() in ("auto", "", "none") else language_raw
+        language = language_raw if language_raw.lower() not in ("auto", "", "none") else None
         condition = os.environ.get("STT_CONDITION", "1").lower() in ("1", "true", "yes")
         temperature = float(os.environ.get("STT_TEMPERATURE", "0.0"))
         segments, _ = model.transcribe(
