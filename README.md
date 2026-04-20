@@ -22,7 +22,8 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 - **key_listener.py**: Monitors keyboard devices for dictation shortcuts. Now supports listening on **all connected keyboards** simultaneously, making it robust against remapping tools and different hardware.
 - **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Automatically uses the persistent server when available for instant transcription.
 - **stt_server.py**: **Persistent model server** that keeps the Whisper model loaded in memory. Eliminates the ~2 second model loading time for each transcription request.
-- **menu.sh**: Interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for setup, mode selection, and system management. Automatically starts the persistent server.
+- **stt_api.py**: **OpenAI-compatible HTTP API** that wraps the Unix socket server. Exposes `POST /v1/audio/transcriptions` on port 8787, making the local GPU-accelerated Whisper available to any tool that speaks the OpenAI Whisper API (e.g. `summarize`, custom scripts).
+- **menu.sh**: Interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for setup, mode selection, and system management. Automatically starts the persistent server and the HTTP API.
 - **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
 
 ## 🎤 Keyboard Shortcuts
@@ -127,6 +128,40 @@ The system uses a **persistent model server** architecture for instant transcrip
 - **With server**: Each transcription takes ~0.4s (model stays in memory)
 
 The menu automatically starts the server when you select "🚀 Run Large-v3 GPU (Recommended)".
+
+### 🌐 OpenAI-Compatible HTTP API
+
+The system includes an HTTP API (`stt_api.py`) that exposes the local Whisper model as an OpenAI-compatible endpoint. This lets external tools use your GPU for transcription.
+
+```
+┌──────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  HTTP client │────▶│   stt_api    │────▶│   stt_server    │
+│  (port 8787) │     │  (FastAPI)   │     │ (model in RAM)  │
+└──────────────┘     └──────────────┘     └─────────────────┘
+```
+
+**Endpoint:** `POST http://localhost:8787/v1/audio/transcriptions`
+
+**Usage with [summarize](https://github.com/steipete/summarize):**
+```bash
+export OPENAI_WHISPER_BASE_URL=http://localhost:8787/v1
+summarize "https://youtu.be/VIDEO_ID" --youtube auto
+```
+
+**Standalone usage:**
+```bash
+# Start the API (if not using menu.sh)
+python3 stt_api.py
+
+# Transcribe a file
+curl -X POST http://localhost:8787/v1/audio/transcriptions \
+  -F file=@audio.wav -F model=whisper-large-v3
+
+# Health check
+curl http://localhost:8787/health
+```
+
+The API starts automatically when you launch "Large-v3 GPU" from the menu. You can also set `OPENAI_WHISPER_BASE_URL` in your shell profile for permanent access.
 
 ### Output Modes
 

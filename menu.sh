@@ -295,7 +295,23 @@ run_large_v3_gpu() {
             echo "❌ Server timeout. Check log/stt_server.log"
             return 1
         fi
-        
+
+        # Start the OpenAI-compatible HTTP API wrapper
+        if [[ -f "$REPO_DIR/stt_api.py" ]]; then
+            echo "🌐 Starting OpenAI-compatible Whisper API on port ${STT_API_PORT:-8787}..."
+            pkill -f "python3.*stt_api.py" 2>/dev/null || true
+            sleep 0.3
+            nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_api.py" >> "$REPO_DIR/log/stt_api.log" 2>&1 &
+            API_PID=$!
+            sleep 1
+            if kill -0 $API_PID 2>/dev/null; then
+                echo "✅ Whisper API ready at http://localhost:${STT_API_PORT:-8787}/v1"
+                echo "   Set OPENAI_WHISPER_BASE_URL=http://localhost:${STT_API_PORT:-8787}/v1 to use with summarize"
+            else
+                echo "⚠️  Whisper API failed to start (non-critical). Check log/stt_api.log"
+            fi
+        fi
+
         echo ""
 
         # Launch the key listener with large-v3 configuration
@@ -317,8 +333,9 @@ run_large_v3_gpu() {
              STT_USE_NOTIFICATION="$STT_USE_NOTIFICATION" \
              python3 "$REPO_DIR/key_listener.py"
         
-        # Cleanup server when key listener exits
-        echo "🛑 Stopping STT server..."
+        # Cleanup server and API when key listener exits
+        echo "🛑 Stopping STT server and API..."
+        pkill -f "python3.*stt_api.py" 2>/dev/null || true
         pkill -f "python3.*stt_server.py" 2>/dev/null || true
         rm -f /tmp/stt_server.sock 2>/dev/null || true
     fi
