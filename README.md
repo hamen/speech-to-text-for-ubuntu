@@ -13,6 +13,7 @@ A powerful Python project that provides **push-to-talk speech recognition** usin
 - **GPU acceleration** - Optimized for NVIDIA RTX 4070 and other CUDA GPUs
 - **Intelligent text cleaning** - Removes speech artifacts while preserving meaningful content
 - **Wayland & X11 support** - Compatible with modern Linux desktop environments
+- **🌐 OpenAI-Compatible HTTP API** - Expose local Whisper via `POST /v1/audio/transcriptions` for use with [summarize](https://github.com/steipete/summarize) and other tools
 - **Configurable models** - From fast `tiny.en` to accurate `large-v3`
 
 Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional GPU acceleration.
