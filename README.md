@@ -14,7 +14,7 @@ A powerful Python project that provides **push-to-talk speech recognition** usin
 - **Intelligent text cleaning** - Removes speech artifacts while preserving meaningful content
 - **Wayland & X11 support** - Compatible with modern Linux desktop environments
 - **🌐 OpenAI-Compatible HTTP API** - Expose local Whisper via `POST /v1/audio/transcriptions` for use with [summarize](https://github.com/steipete/summarize) and other tools
-- **Configurable models** - From fast `tiny.en` to accurate `large-v3`
+- **Configurable models** - From fast `tiny.en` to fast, accurate `large-v3-turbo`
 
 Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional GPU acceleration.
 
@@ -25,7 +25,7 @@ Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional G
 - **stt_server.py**: **Persistent model server** that keeps the Whisper model loaded in memory. Eliminates the ~2 second model loading time for each transcription request.
 - **stt_api.py**: **OpenAI-compatible HTTP API** that wraps the Unix socket server. Exposes `POST /v1/audio/transcriptions` on port 8787, making the local GPU-accelerated Whisper available to any tool that speaks the OpenAI Whisper API (e.g. `summarize`, custom scripts).
 - **menu.sh**: Interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for setup, mode selection, and system management. Automatically starts the persistent server and the HTTP API.
-- **large-v3-config.sh**: Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
+- **large-v3-config.sh**: Optimized configuration for RTX 4070 using `large-v3-turbo` by default with automatic cuDNN detection.
 
 ## 🎤 Keyboard Shortcuts
 
@@ -199,9 +199,9 @@ The system includes intelligent text cleaning that transforms raw speech transcr
 You can tweak accuracy/latency and platform settings without changing code. Set these env vars when launching `menu.sh` (it will export from your config) or when running `sudo -E python3 key_listener.py`.
 
 ### Model Configuration
-- `STT_MODEL` (default: `large-v3`) — examples: `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3`.
+- `STT_MODEL` (default: `large-v3-turbo`) — examples: `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3-turbo`, `large-v3`.
 - `STT_DEVICE` (default: `cuda`) — `cuda`, `rocm`, `auto`, or `cpu`.
-- `STT_COMPUTE_TYPE` — defaults to `float16` on GPU, `int8` on CPU. Options: `int8`, `int8_float16`, `float16`, `float32`.
+- `STT_COMPUTE_TYPE` — defaults to `int8_float16` on GPU, `int8` on CPU. Options: `int8`, `int8_float16`, `float16`, `float32`.
 - `STT_BEAM_SIZE` (default: `5`) — increase (e.g., `5`) for better accuracy, slightly slower.
 - `STT_LANGUAGE` (default: `auto`) — language code or `auto` for automatic detection. Examples: `en`, `it`, `es`, `de`, `fr`.
 

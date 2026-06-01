@@ -16,9 +16,9 @@ DEFAULT_CONFIG=(
     "STT_AGGRESSIVE_CLEANING=0"
     "STT_PRESERVE_COMMON_WORDS=1"
     "STT_MODE=clipboard"
-    "STT_MODEL=large-v3"
+    "STT_MODEL=large-v3-turbo"
     "STT_DEVICE=cuda"
-    "STT_COMPUTE_TYPE=float16"
+    "STT_COMPUTE_TYPE=int8_float16"
     "STT_BEAM_SIZE=5"
     "STT_ENABLE_DOUBLE_SUPER=0"
 )
@@ -366,7 +366,7 @@ model_settings_menu() {
         echo ""
         echo "🚀 Model & Performance Settings"
         echo "==============================="
-        echo "Current: Model=${STT_MODEL:-large-v3}, Device=${STT_DEVICE:-cuda}, Beam=${STT_BEAM_SIZE:-5}"
+        echo "Current: Model=${STT_MODEL:-large-v3-turbo}, Device=${STT_DEVICE:-cuda}, Beam=${STT_BEAM_SIZE:-5}"
         echo ""
         echo "1️⃣  Model Selection"
         echo "2️⃣  Device Selection"
@@ -402,10 +402,10 @@ model_selection_menu() {
     echo ""
     echo "📊 Model Selection"
     echo "=================="
-    echo "Current: ${STT_MODEL:-large-v3}"
+    echo "Current: ${STT_MODEL:-large-v3-turbo}"
     echo ""
 
-    local models=("tiny.en" "base.en" "small.en" "medium.en" "large-v3" "large-v2" "large")
+    local models=("tiny.en" "base.en" "small.en" "medium.en" "large-v3-turbo" "large-v3" "large-v2" "large")
     local choice=$(gum choose "${models[@]}" "Back")
 
     if [[ "$choice" != "Back" ]]; then

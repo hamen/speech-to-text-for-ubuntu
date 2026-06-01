@@ -19,7 +19,7 @@ fi
 # =============================================================================
 
 # Model Selection
-export STT_MODEL="${STT_MODEL:-large-v3}"                    # Best quality transcription
+export STT_MODEL="${STT_MODEL:-large-v3-turbo}"              # Fast, high-quality transcription with lower VRAM use
 
 # Check if cuDNN is available for GPU mode
 _check_cudnn() {
@@ -48,11 +48,15 @@ if [[ "${STT_DEVICE:-auto}" == "cuda" ]] || [[ "${STT_DEVICE:-auto}" == "auto" ]
         export STT_COMPUTE_TYPE="int8"
     else
         export STT_DEVICE="${STT_DEVICE:-cuda}"
-        export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"
+        export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-int8_float16}"
     fi
 else
     export STT_DEVICE="${STT_DEVICE:-cuda}"
-    export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"
+    if [[ "$STT_DEVICE" == "cpu" ]]; then
+        export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-int8}"
+    else
+        export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-int8_float16}"
+    fi
 fi
 export STT_BEAM_SIZE="${STT_BEAM_SIZE:-5}"                    # Maximum accuracy
 export STT_TEMPERATURE="${STT_TEMPERATURE:-0.0}"              # Deterministic output
@@ -98,10 +102,10 @@ echo ""
 # OPTIMAL LARGE-V3 CONFIGURATION
 # =============================================================================
 
-# Model Configuration (Best Quality)
-export STT_MODEL="large-v3"           # Best accuracy, ~3GB VRAM usage
-export STT_DEVICE="cuda"              # GPU acceleration
-export STT_COMPUTE_TYPE="float16"     # Optimal precision/speed balance for RTX 4070
+# Model Configuration (loaded from persistent config — do not override here)
+export STT_MODEL="${STT_MODEL:-large-v3-turbo}"            # turbo: ~3-4x faster, ~1GB VRAM, qualita' IT/EN ~equivalente a large-v3
+export STT_DEVICE="${STT_DEVICE:-cuda}"                    # GPU acceleration
+export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-int8_float16}"  # int8 weights + fp16 compute: taglio VRAM, perdita impercettibile
 
 # Quality vs Speed Optimization
 # STT_BEAM_SIZE is loaded from persistent config (line 25) - do not override here
@@ -144,8 +148,8 @@ export STT_USE_NOTIFICATION="0"             # Disable desktop notifications by d
 # =============================================================================
 
 # These settings are optimized for your RTX 4070:
-# - large-v3: Best accuracy, reasonable speed, ~3GB VRAM usage
-# - float16: Good precision, efficient memory usage
+# - large-v3-turbo: Fast, high-quality transcription, ~1GB VRAM usage
+# - int8_float16: Lower VRAM usage with fp16 compute on CUDA
 # - beam_size=5: Maximum accuracy without being too slow
 # - VAD enabled: Reduces processing of silence
 # - Text cleaning: Post-processes for professional-quality output
@@ -167,7 +171,7 @@ echo ""
 
 echo "💡 How to Use:"
 echo "   1. Press F16 (or your hotkey) to start recording"
-echo "   2. Speak clearly - large-v3 will provide best accuracy"
+echo "   2. Speak clearly - $STT_MODEL will provide high-quality transcription"
 echo "   3. Text is automatically cleaned and copied to clipboard"
 echo "   4. Press Ctrl+V to paste the cleaned text"
 echo ""
@@ -203,9 +207,9 @@ fi
 echo "🎮 GPU Memory Status:"
 nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits | while IFS=, read -r used total; do
     echo "   Used: ${used}MB / Total: ${total}MB"
-    echo "   Available: $((total - used))MB for large-v3 model"
+    echo "   Available: $((total - used))MB for $STT_MODEL model"
 done
 
 echo ""
 echo "🎉 Large-v3 GPU Configuration Ready!"
-echo "   Your RTX 4070 is configured for maximum quality transcription!"
+echo "   Your RTX 4070 is configured for fast, high-quality transcription!"
