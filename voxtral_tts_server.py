@@ -28,12 +28,11 @@ print(f"[voxtral] ready on 127.0.0.1:{PORT} (voice={VOICE}, pitch={PITCH})", flu
 
 app = Flask(__name__)
 
-
-def _write_wav(path, audio, sr):
-    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
-    with wave.open(path, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
-        w.writeframes(pcm.tobytes())
+SR = 24000
+# Younger Nuc voice for FREE via playback rate: telling sox a higher input rate
+# raises pitch (~+PITCH cents) and shortens the clip a bit — and it streams, so
+# no pitch post-processing that would block. First audio comes out in ~0.8s.
+PLAY_RATE = int(round(SR * (2 ** (float(PITCH) / 1200.0))))
 
 
 @app.post("/tts")
@@ -41,21 +40,21 @@ def tts():
     text = (request.get_json(silent=True) or {}).get("text", "").strip()
     if not text:
         return jsonify(error="no text"), 400
-    sr = 24000
-    chunks = []
-    for r in model.generate(text=text, voice=VOICE):
-        chunks.append(np.array(r.audio, copy=False))
-        sr = getattr(r, "sample_rate", sr)
-    audio = np.concatenate(chunks).astype(np.float32) if len(chunks) > 1 else chunks[0].astype(np.float32)
-    raw = tempfile.mktemp(suffix=".wav")
-    out = tempfile.mktemp(suffix=".wav")
-    _write_wav(raw, audio, sr)
-    # pitch up for a younger Nuc voice (keeps tempo)
-    subprocess.run(["sox", raw, out, "pitch", PITCH],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try: os.unlink(raw)
-    except OSError: pass
-    return jsonify(path=out)
+    # stream Voxtral chunks straight to sox, played at the elevated rate
+    player = subprocess.Popen(
+        ["sox", "-q", "-t", "raw", "-r", str(PLAY_RATE), "-e", "float", "-b", "32",
+         "-c", "1", "-", "-d"],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for r in model.generate(text=text, voice=VOICE, stream=True, streaming_interval=0.4):
+            player.stdin.write(np.asarray(r.audio, dtype=np.float32).tobytes())
+        player.stdin.close()
+        player.wait()
+    except Exception as e:
+        try: player.kill()
+        except Exception: pass
+        return jsonify(error=str(e)), 500
+    return jsonify(ok=True)
 
 
 if __name__ == "__main__":

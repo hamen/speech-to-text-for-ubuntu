@@ -127,21 +127,15 @@ _EMOJI = re.compile(
     "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF←-⇿⌀-⏿]")
 
 def _voxtral_speak(text: str) -> bool:
-    """Voxtral TTS server (younger it_male voice). Returns False if unavailable."""
+    """Voxtral TTS server streams + plays the younger Nuc voice directly (starts in
+    ~0.8s). Returns False if the server is unavailable."""
     if not VOXTRAL_URL:
         return False
     try:
-        r = requests.post(f"{VOXTRAL_URL}/tts", json={"text": text}, timeout=40)
-        r.raise_for_status()
-        path = r.json().get("path")
-        if path and os.path.exists(path):
-            subprocess.run(["afplay", path], timeout=90)
-            try: os.unlink(path)
-            except OSError: pass
-            return True
+        r = requests.post(f"{VOXTRAL_URL}/tts", json={"text": text}, timeout=60)
+        return r.ok and bool((r.json() or {}).get("ok"))
     except Exception:
-        pass
-    return False
+        return False
 
 def speak(text: str):
     text = _EMOJI.sub("", text or "")
