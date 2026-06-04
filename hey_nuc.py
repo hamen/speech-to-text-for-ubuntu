@@ -327,7 +327,7 @@ def converse(stream_unused, noise_floor):
         try:
             nf = measure_noise_floor(s, 0.4)
             face("idle")
-            wav = capture_command(s, nf, max_sec=10.0, silence_ms=1100, lead_ms=7000)
+            wav = capture_command(s, nf, max_sec=10.0, silence_ms=800, lead_ms=7000)
         finally:
             s.terminate()
         if not wav:
