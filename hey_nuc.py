@@ -43,6 +43,7 @@ STT_URL    = os.environ.get("HEYNUC_STT", _STT_D)
 STT_MODE   = os.environ.get("HEYNUC_STT_MODE", _STTMODE_D)   # "whispercpp" | "openai"
 SAY_VOICE  = os.environ.get("HEYNUC_SAY_VOICE", "Alice")      # macOS `say` fallback voice
 PIPER_LEN  = os.environ.get("HEYNUC_PIPER_LENGTH", "1.35")     # piper speed (higher = slower/clearer)
+VOXTRAL_URL = os.environ.get("HEYNUC_VOXTRAL", "http://127.0.0.1:8790" if IS_MAC else "")  # Voxtral TTS server (Mac)
 FACE_URL    = os.environ.get("HEYNUC_FACE",
     "http://192.168.0.124:3033" if IS_MAC else "http://localhost:3033")  # Mac → nuc_face on the NUC (LAN)
 LLAMA       = os.environ.get("HEYNUC_LLAMA", "/home/linuxbrew/.linuxbrew/bin/llama-cli")
@@ -125,13 +126,32 @@ def face(state=None, bubble=None, ttl=8000):
 _EMOJI = re.compile(
     "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF←-⇿⌀-⏿]")
 
+def _voxtral_speak(text: str) -> bool:
+    """Voxtral TTS server (younger it_male voice). Returns False if unavailable."""
+    if not VOXTRAL_URL:
+        return False
+    try:
+        r = requests.post(f"{VOXTRAL_URL}/tts", json={"text": text}, timeout=40)
+        r.raise_for_status()
+        path = r.json().get("path")
+        if path and os.path.exists(path):
+            subprocess.run(["afplay", path], timeout=90)
+            try: os.unlink(path)
+            except OSError: pass
+            return True
+    except Exception:
+        pass
+    return False
+
 def speak(text: str):
     text = _EMOJI.sub("", text or "")
     text = re.sub(r"[*_`#]", "", text).strip()   # drop stray markdown
     if not text:
         return
     if IS_MAC:
-        if PIPER_VOICE and os.path.exists(PIPER_VOICE):   # piper-tts (natural) via python module
+        if _voxtral_speak(text):                          # Voxtral (preferred Nuc voice)
+            return
+        if PIPER_VOICE and os.path.exists(PIPER_VOICE):   # piper-tts fallback
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 wav = f.name
             try:
