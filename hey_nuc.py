@@ -66,6 +66,7 @@ KID_PERSONA = (
     "Parli a VOCE, quindi: frasi corte (massimo 2-3 frasi), italiano semplice e allegro. "
     "Sei curioso, gentile e giocoso: fai domande, racconti piccole curiosità, ogni tanto una "
     "battuta carina. Mai argomenti spaventosi, tristi o non adatti ai bambini. "
+    "Se il bambino vuole smettere o ti chiede come fermarti, digli di dire «ciao ciao» o «basta». "
     "NIENTE emoji, niente elenchi, niente simboli: solo parole, come se parlassi davvero.")
 
 CHUNK = 4000  # bytes = 2000 samples = 0.125 s at 16 kHz mono s16le
@@ -313,8 +314,9 @@ def ollama_chat(messages):
         print(f"   (ollama error: {e})", flush=True)
         return ""
 
-STOP_WORDS = ("basta", "ciao polpo", "ciao nuc", "a dopo", "vai a dormire",
-              "buonanotte", "stop", "ferma")
+STOP_WORDS = ("ciao ciao", "ciao polpo", "ciao nuc", "fine", "basta", "arrivederci",
+              "a dopo", "a presto", "ci sentiamo", "vai a dormire", "buonanotte",
+              "stop", "ferma", "spegniti", "smettila")
 
 def converse(stream_unused, noise_floor):
     """Multi-turn kid conversation: keeps the floor (no re-wake needed) with
