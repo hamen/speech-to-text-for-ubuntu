@@ -43,7 +43,8 @@ STT_URL    = os.environ.get("HEYNUC_STT", _STT_D)
 STT_MODE   = os.environ.get("HEYNUC_STT_MODE", _STTMODE_D)   # "whispercpp" | "openai"
 SAY_VOICE  = os.environ.get("HEYNUC_SAY_VOICE", "Alice")      # macOS `say` fallback voice
 PIPER_LEN  = os.environ.get("HEYNUC_PIPER_LENGTH", "1.35")     # piper speed (higher = slower/clearer)
-FACE_URL    = os.environ.get("HEYNUC_FACE", "http://localhost:3033")
+FACE_URL    = os.environ.get("HEYNUC_FACE",
+    "http://192.168.0.124:3033" if IS_MAC else "http://localhost:3033")  # Mac → nuc_face on the NUC (LAN)
 LLAMA       = os.environ.get("HEYNUC_LLAMA", "/home/linuxbrew/.linuxbrew/bin/llama-cli")
 # gemma-3-4b (non-thinking) is the right brain for a voice assistant: it answers
 # directly in ~3s. gemma-4-E4B burns the whole token budget on a thinking block.
