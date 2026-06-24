@@ -2,6 +2,19 @@
 
 A powerful Python project that provides **push-to-talk speech recognition** using native keyboard shortcuts and automatically transcribes it to text using Faster Whisper models with **GPU acceleration** and **intelligent text cleaning**.
 
+## ✨ What's New (June 2026)
+
+**LLM post-processing pass** (`parakeet_stt_server.py`)
+
+The Parakeet server now runs a lightweight local LLM (Qwen2.5-0.5B-Instruct, ~470MB, fully on GPU) over every transcription before it reaches the clipboard. It fixes obvious speech-to-text errors and adds missing question marks — without rephrasing or rewriting.
+
+- **~150–250ms** added latency on an RTX 4070 (negligible for push-to-talk)
+- Italian and English supported out of the box
+- Safety guard: if the LLM changes more than 20% of the words, the original is kept
+- Controlled by `STT_LLM_POSTPROCESS=0/1` (default: on) and `STT_LLM_MODEL` env vars
+
+**300ms silence padding** on every recording before it's passed to Parakeet — prevents the last word from being clipped when the push-to-talk key is released while still speaking.
+
 **🎯 Key Features:**
 - **Push-to-talk recording** - Press and hold to record, release to process
 - **Native Keyboard Shortcuts** - **Double-Control** by default; optional **Double-Super** toggle in config
