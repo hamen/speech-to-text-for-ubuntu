@@ -2,7 +2,7 @@
 
 ## ✨ What's New — `parakeet_stt_server.py` LLM post-processing
 
-> Added in [#PR](https://github.com/CDNsun/speech-to-text-for-ubuntu/pulls) — optional, off by default unless you use Parakeet backend.
+> Added in [#2](https://github.com/CDNsun/speech-to-text-for-ubuntu/pull/2) — optional, off by default unless you use Parakeet backend.
 
 Two quality-of-life improvements for the [Parakeet persistent server](parakeet_stt_server.py):
 
@@ -18,7 +18,7 @@ Runs fully on GPU via `llama-cpp-python`. Adds ~150–250 ms on an RTX 4070 — 
 # install deps
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 # download model (~470 MB)
-python -c "from huggingface_hub import hf_hub_download; hf_hub_download('Qwen/Qwen2.5-0.5B-Instruct-GGUF', 'qwen2.5-0.5b-instruct-q4_k_m.gguf', local_dir='~/models/stt-postprocess')"
+python -c "import os; from huggingface_hub import hf_hub_download; hf_hub_download('Qwen/Qwen2.5-0.5B-Instruct-GGUF', 'qwen2.5-0.5b-instruct-q4_k_m.gguf', local_dir=os.path.expanduser('~/models/stt-postprocess'))"
 ```
 
 Environment variables:
