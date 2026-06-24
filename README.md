@@ -2,7 +2,7 @@
 
 ## ✨ What's New — `parakeet_stt_server.py` LLM post-processing
 
-> Added in [#2](https://github.com/CDNsun/speech-to-text-for-ubuntu/pull/2) — optional, off by default unless you use Parakeet backend.
+> Added in [#2](https://github.com/CDNsun/speech-to-text-for-ubuntu/pull/2) — enabled by default when using the Parakeet backend; set `STT_LLM_POSTPROCESS=0` to disable.
 
 Two quality-of-life improvements for the [Parakeet persistent server](parakeet_stt_server.py):
 

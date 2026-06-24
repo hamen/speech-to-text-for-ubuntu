@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Persistent Parakeet STT server — drop-in for stt_server.py.
+"""Persistent Parakeet STT server — drop-in for speech_to_text_server.py.
 
-Speaks the EXACT same Unix-socket protocol as stt_server.py, so key_listener.py
-and speech_to_text.py need ZERO changes: the menu just starts this server instead
-of the Whisper one.
+Compatible with the existing Unix-socket protocol used by speech_to_text_client.py
+and key_listener.py — no client changes needed.
 
-  request : {"audio_path": "<wav>"}\n     (16 kHz mono wav, as key_listener records)
-  response: {"text": "...", "duration": <seconds>}\n   (or {"error": "..."})
+  request : {"audio_file": "<wav>"}\n     (legacy) or {"audio_path": "<wav>"}\n
+  response: {"ok": true, "text": "...", "duration": <seconds>}\n  (or {"error": "..."})
 
 Backend: NVIDIA Parakeet-TDT-0.6B-v3 (multilingual, incl. Italian) via onnx-asr +
 onnxruntime-gpu on the GPU. Much faster than Whisper, comparable accuracy.
@@ -151,7 +150,7 @@ def transcribe(model, audio_path: str) -> dict:
         elapsed = time.time() - t0
         logging.info(f"Transcribed in {elapsed:.2f}s: {text[:80]}{'…' if len(text) > 80 else ''}")
         text = postprocess(text)
-        return {"text": text, "duration": elapsed}
+        return {"ok": True, "text": text, "duration": elapsed}
     except Exception as e:
         logging.error(f"Transcription error: {e}")
         return {"error": str(e)}
@@ -176,7 +175,8 @@ def handle_client(conn, model):
         if not data:
             return
         request = json.loads(data.decode("utf-8").strip())
-        audio_path = request.get("audio_path")
+        # Accept both "audio_path" (new) and "audio_file" (legacy client compat)
+        audio_path = request.get("audio_path") or request.get("audio_file")
         response = transcribe(model, audio_path) if audio_path else {"error": "No audio_path provided"}
         conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
     except json.JSONDecodeError:
@@ -207,7 +207,7 @@ def main():
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
-    os.chmod(SOCKET_PATH, 0o666)  # accessible to user clients when run as root
+    os.chmod(SOCKET_PATH, 0o600)
     logging.info(f"🐙 Parakeet STT Server listening on {SOCKET_PATH}")
     try:
         while not SHUTDOWN.is_set():
