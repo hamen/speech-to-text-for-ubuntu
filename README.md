@@ -1,5 +1,39 @@
 # Fast push-to-talk speech-to-text for Ubuntu
 
+## ✨ What's New — `parakeet_stt_server.py` LLM post-processing
+
+> Added in [#PR](https://github.com/CDNsun/speech-to-text-for-ubuntu/pulls) — optional, off by default unless you use Parakeet backend.
+
+Two quality-of-life improvements for the [Parakeet persistent server](parakeet_stt_server.py):
+
+**1. LLM post-processing pass**
+After Parakeet transcribes, a tiny local LLM (Qwen2.5-0.5B-Instruct, ~470 MB) runs over the text and:
+- Fixes obvious speech-to-text garbles (wrong homophones, impossible words)
+- Adds `?` when the sentence starts with a question word (`come`, `cosa`, `what`, `how`, etc.)
+- Does **not** rephrase — a safety guard rejects the LLM output if word count changes by >20%
+
+Runs fully on GPU via `llama-cpp-python`. Adds ~150–250 ms on an RTX 4070 — negligible for push-to-talk.
+
+```bash
+# install deps
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+# download model (~470 MB)
+python -c "from huggingface_hub import hf_hub_download; hf_hub_download('Qwen/Qwen2.5-0.5B-Instruct-GGUF', 'qwen2.5-0.5b-instruct-q4_k_m.gguf', local_dir='~/models/stt-postprocess')"
+```
+
+Environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `STT_LLM_POSTPROCESS` | `1` | Set to `0` to disable |
+| `STT_LLM_MODEL` | `~/models/stt-postprocess/qwen2.5-0.5b-instruct-q4_k_m.gguf` | Path to GGUF model |
+| `STT_LLM_GPU_LAYERS` | `99` | GPU layers (set to `0` for CPU-only) |
+
+**2. 300 ms silence padding**
+Each recording gets 300 ms of silence appended before being passed to Parakeet. This prevents the last word from being clipped when the push-to-talk key is released while still speaking — a common issue with tight key-release timing.
+
+---
+
 This project gives Ubuntu a practical push-to-talk speech-to-text workflow. You hold a key, speak, release the key, and the transcript is typed into the currently focused application.
 
 The main goal is low-latency local transcription that is still usable on ordinary hardware. In practice, this setup can be fast enough for live work even on a laptop without a dedicated GPU. On CPU-only hardware, transcription can still complete in under two seconds, which makes it practical for live communication with an AI agent or any other text interface without typing.
