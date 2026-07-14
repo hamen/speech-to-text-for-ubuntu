@@ -4,5 +4,5 @@
 #   ~/parakeet-test/venv/bin/pip install -r requirements-parakeet.txt
 # Then point the menu at it (default) or:  export PARAKEET_PYTHON=~/parakeet-test/venv/bin/python
 onnx-asr
-onnxruntime-gpu
+onnxruntime-gpu<1.23  # CUDA 12.x — 1.27 needs CUDA 13 (libcudart.so.13), system has 12.4
 huggingface_hub

@@ -1,34 +1,44 @@
 #!/usr/bin/env python3
-"""Persistent Parakeet STT server — drop-in for stt_server.py.
+"""Persistent Parakeet STT server — drop-in for speech_to_text_server.py.
 
-Speaks the EXACT same Unix-socket protocol as stt_server.py, so key_listener.py
-and speech_to_text.py need ZERO changes: the menu just starts this server instead
-of the Whisper one.
+Compatible with the existing Unix-socket protocol used by speech_to_text_client.py
+and key_listener.py — no client changes needed.
 
-  request : {"audio_path": "<wav>"}\n     (16 kHz mono wav, as key_listener records)
-  response: {"text": "...", "duration": <seconds>}\n   (or {"error": "..."})
+  request : {"audio_file": "<wav>"}\n     (legacy) or {"audio_path": "<wav>"}\n
+  response: {"ok": true, "text": "...", "duration": <seconds>}\n  (or {"error": "..."})
 
 Backend: NVIDIA Parakeet-TDT-0.6B-v3 (multilingual, incl. Italian) via onnx-asr +
 onnxruntime-gpu on the GPU. Much faster than Whisper, comparable accuracy.
 
 Deps (separate venv recommended):  pip install onnx-asr onnxruntime-gpu huggingface_hub
 Env:
-  STT_PARAKEET_MODEL  (default: nemo-parakeet-tdt-0.6b-v3)
+  STT_PARAKEET_MODEL    (default: nemo-parakeet-tdt-0.6b-v3)
   STT_PARAKEET_PROVIDER (default: CUDAExecutionProvider; use CPUExecutionProvider to test)
+  STT_LLM_POSTPROCESS   (default: 1 — set to 0 to disable)
+  STT_LLM_MODEL         (default: ~/models/stt-postprocess/qwen2.5-0.5b-instruct-q4_k_m.gguf)
+  STT_LLM_GPU_LAYERS    (default: 99)
 """
-import json, logging, os, signal, socket, threading, time
+import json, logging, os, signal, socket, tempfile, threading, time, wave
 
 SOCKET_PATH = os.environ.get("STT_SOCKET", "/tmp/stt_server.sock")
 MODEL_NAME  = os.environ.get("STT_PARAKEET_MODEL", "nemo-parakeet-tdt-0.6b-v3")
 PROVIDER    = os.environ.get("STT_PARAKEET_PROVIDER", "CUDAExecutionProvider")
 LLM_ENABLED = os.environ.get("STT_LLM_POSTPROCESS", "1").lower() in ("1", "true", "yes")
-LLM_MODEL   = os.environ.get("STT_LLM_MODEL", "/home/ivan/models/stt-postprocess/qwen2.5-0.5b-instruct-q4_k_m.gguf")
-LLM_GPU_LAYERS = int(os.environ.get("STT_LLM_GPU_LAYERS", "99"))
+LLM_MODEL   = os.path.expanduser(os.environ.get(
+    "STT_LLM_MODEL",
+    "~/models/stt-postprocess/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+))
+try:
+    LLM_GPU_LAYERS = int(os.environ.get("STT_LLM_GPU_LAYERS", "99"))
+except ValueError:
+    LLM_GPU_LAYERS = 99
+    logging.warning("STT_LLM_GPU_LAYERS is not a valid integer, defaulting to 99")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 SHUTDOWN = threading.Event()
 
-_LLM_LOCK = threading.Lock()
+_LLM_LOCK   = threading.Lock()
+_MODEL_LOCK = threading.Lock()
 _llm = None
 
 
@@ -107,18 +117,22 @@ def postprocess(text: str) -> str:
 
 
 def _pad_audio(audio_path: str, pad_ms: int = 300) -> str:
-    """Append silence padding to avoid clipping the last word on key release."""
-    import wave, array
+    """Append silence padding to avoid clipping the last word on key release.
+
+    Returns a path to a temporary file (caller must delete it) or the original
+    path on failure so the caller can always proceed.
+    """
     try:
         with wave.open(audio_path, 'rb') as w:
             params = w.getparams()
             frames = w.readframes(w.getnframes())
-        n_pad = int(params.framerate * pad_ms / 1000) * params.nchannels * (params.sampwidth)
-        padded_path = audio_path + ".padded.wav"
-        with wave.open(padded_path, 'wb') as w:
+        n_pad = int(params.framerate * pad_ms / 1000) * params.nchannels * params.sampwidth
+        tmp = tempfile.NamedTemporaryFile(suffix=".padded.wav", delete=False, dir="/tmp")
+        tmp.close()
+        with wave.open(tmp.name, 'wb') as w:
             w.setparams(params)
             w.writeframes(frames + b'\x00' * n_pad)
-        return padded_path
+        return tmp.name
     except Exception as e:
         logging.warning(f"Audio padding failed: {e}")
         return audio_path
@@ -127,20 +141,25 @@ def _pad_audio(audio_path: str, pad_ms: int = 300) -> str:
 def transcribe(model, audio_path: str) -> dict:
     if not os.path.exists(audio_path):
         return {"error": f"Audio file not found: {audio_path}"}
+    padded = audio_path
     try:
         t0 = time.time()
         padded = _pad_audio(audio_path)
-        text = (model.recognize(padded) or "").strip()
-        if padded != audio_path:
-            try: os.unlink(padded)
-            except Exception: pass
+        with _MODEL_LOCK:
+            text = (model.recognize(padded) or "").strip()
         elapsed = time.time() - t0
         logging.info(f"Transcribed in {elapsed:.2f}s: {text[:80]}{'…' if len(text) > 80 else ''}")
         text = postprocess(text)
-        return {"text": text, "duration": elapsed}
+        return {"ok": True, "text": text, "duration": elapsed}
     except Exception as e:
         logging.error(f"Transcription error: {e}")
         return {"error": str(e)}
+    finally:
+        if padded != audio_path:
+            try:
+                os.unlink(padded)
+            except Exception:
+                pass
 
 
 def handle_client(conn, model):
@@ -156,7 +175,8 @@ def handle_client(conn, model):
         if not data:
             return
         request = json.loads(data.decode("utf-8").strip())
-        audio_path = request.get("audio_path")
+        # Accept both "audio_path" (new) and "audio_file" (legacy client compat)
+        audio_path = request.get("audio_path") or request.get("audio_file")
         response = transcribe(model, audio_path) if audio_path else {"error": "No audio_path provided"}
         conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
     except json.JSONDecodeError:
@@ -187,7 +207,7 @@ def main():
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
-    os.chmod(SOCKET_PATH, 0o666)  # accessible to user clients when run as root
+    os.chmod(SOCKET_PATH, 0o600)
     logging.info(f"🐙 Parakeet STT Server listening on {SOCKET_PATH}")
     try:
         while not SHUTDOWN.is_set():
@@ -198,6 +218,7 @@ def main():
             except socket.timeout:
                 continue
     finally:
+        server.close()
         cleanup_socket()
         logging.info("Parakeet STT server stopped.")
 
