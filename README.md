@@ -270,7 +270,11 @@ Env vars: `STT_SOCKET` (default `/tmp/stt_server.sock`), `STT_LANG` (default `au
 
 ### systemd (user) + switch between engines
 
-Copy `nemotron-stt.service.template` to `~/.config/systemd/user/nemotron-stt.service`, replacing `__NEMO_HOME__` and `__VENV__`. Then switch the active dictation engine (both bind the same socket, so only one runs at a time):
+Install both user units (they bind the same socket, so only one runs at a time):
+- Copy `nemotron-stt.service.template` → `~/.config/systemd/user/nemotron-stt.service`, replacing `__NEMO_HOME__` and `__VENV__`.
+- Copy `parakeet-stt.service.template` → `~/.config/systemd/user/parakeet-stt.service`, replacing `__REPO__` and `__VENV__` (needed for `stt-switch.sh parakeet`).
+
+Then `systemctl --user daemon-reload` and switch the active dictation engine:
 
 ```bash
 ./stt-switch.sh nemotron   # switch dictation to Nemotron

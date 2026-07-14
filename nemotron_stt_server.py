@@ -6,11 +6,12 @@ Parla lo STESSO protocollo Unix-socket di key_listener.py / speech_to_text.py:
   response: {"ok": true, "text": "...", "duration": <s>}\n   (o {"error": "..."})
 
 Backend: nvidia/nemotron-3.5-asr-streaming-0.6b via transformers>=5.13 (bf16, CUDA).
-Per-utterance offline (model.generate). Lingua fissa via STT_LANG (default it-IT).
+Per-utterance offline (model.generate). Lingua via STT_LANG (default "auto":
+rilevamento automatico, gestisce il dettato misto italiano/inglese).
 
 Env:
   STT_SOCKET   (default /tmp/stt_server.sock)  — stesso socket del client esistente
-  STT_LANG     (default it-IT)
+  STT_LANG     (default auto; usa un locale es. it-IT per forzare una lingua)
   STT_DTYPE    (default bfloat16; usa float32 per fallback)
   STT_PAD_MS   (default 300)  — padding di silenzio anti-taglio ultima parola
 """
@@ -55,9 +56,15 @@ def load_model():
     logging.info(f"✅ Nemotron ready in {time.time()-t0:.1f}s on {_model.device}")
 
 
+MAX_REQUEST_BYTES = 65536          # richiesta JSON: cap anti-OOM su recv non terminato
+MAX_AUDIO_BYTES   = 200 * 1024 * 1024  # ~200MB: rifiuta file enormi / FIFO infinite
+
+
 def transcribe(audio_path: str) -> dict:
-    if not os.path.exists(audio_path):
-        return {"error": f"Audio file not found: {audio_path}"}
+    if not os.path.isfile(audio_path):
+        return {"error": f"Audio file not found or not a regular file: {audio_path}"}
+    if os.path.getsize(audio_path) > MAX_AUDIO_BYTES:
+        return {"error": "Audio file too large"}
     try:
         t0 = time.time()
         audio = _load_audio(audio_path, sampling_rate=_sr)
@@ -81,12 +88,17 @@ def transcribe(audio_path: str) -> dict:
 
 def handle_client(conn):
     try:
+        conn.settimeout(5.0)  # niente slowloris: client lento => chiudi
         data = b""
         while b"\n" not in data:
             chunk = conn.recv(4096)
             if not chunk:
                 break
             data += chunk
+            if len(data) > MAX_REQUEST_BYTES:
+                try: conn.sendall((json.dumps({"error": "Request too large"}) + "\n").encode("utf-8"))
+                except Exception: pass
+                return
         if not data:
             return
         request = json.loads(data.decode("utf-8").strip())
