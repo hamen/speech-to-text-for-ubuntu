@@ -1,0 +1,8 @@
+# Nemotron 3.5 ASR streaming server — deps (venv separato consigliato)
+# Il modello richiede transformers >= 5.13 (classe nativa Nemotron3_5Asr).
+transformers>=5.13.0
+torch
+accelerate
+soundfile
+librosa
+numpy

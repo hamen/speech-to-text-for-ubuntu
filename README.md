@@ -237,6 +237,47 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 - **✅ Clipboard Fixed**: X11/Xfce4 clipboard functionality now works correctly with automatic session detection
 - **Tools Used**: `xclip` (primary) and `xsel` (fallback) for X11 clipboard operations
 
+## 🚀 Nemotron 3.5 ASR (streaming, multilingual) — Linux experiment
+
+An alternative STT backend to Whisper/Parakeet, based on **[nvidia/nemotron-3.5-asr-streaming-0.6b](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)** (FastConformer cache-aware RNNT, 40 languages, real streaming). It's a **drop-in** for the persistent server: same Unix-socket protocol as `parakeet_stt_server.py`, so `key_listener.py` / `speech_to_text.py` need **no changes**.
+
+Why it can be a nice upgrade: true cache-aware streaming, automatic language detection (handles mixed Italian/English dictation without dropping English words), and it runs in **bf16 using only ~1.4 GB VRAM** (loads in ~1s once cached).
+
+**Requires `transformers >= 5.13.0`** (native `Nemotron3_5Asr` class). The stable NeMo PyPI release does **not** ship the required model class, so use the Transformers path.
+
+### Setup (separate venv recommended)
+
+```bash
+python3.12 -m venv venv-nemotron
+./venv-nemotron/bin/pip install -r requirements-nemotron.txt
+# First run downloads the model (~2.5 GB safetensors). Point HF_HOME to a disk with space.
+```
+
+### Run
+
+```bash
+# Persistent socket server (drop-in for parakeet_stt_server.py)
+STT_LANG=auto STT_DTYPE=bfloat16 ./venv-nemotron/bin/python nemotron_stt_server.py
+
+# One-off streaming from the mic (prints partial hypotheses live, Ctrl-C to stop)
+./venv-nemotron/bin/python stream_hf.py auto
+
+# Offline transcription of a file
+./venv-nemotron/bin/python transcribe_hf.py audio.wav auto
+```
+
+Env vars: `STT_SOCKET` (default `/tmp/stt_server.sock`), `STT_LANG` (default `auto` — recommended; use a locale like `it-IT` to force a language), `STT_DTYPE` (default `bfloat16`), `STT_PAD_MS` (default `300`).
+
+### systemd (user) + switch between engines
+
+Copy `nemotron-stt.service.template` to `~/.config/systemd/user/nemotron-stt.service`, replacing `__NEMO_HOME__` and `__VENV__`. Then switch the active dictation engine (both bind the same socket, so only one runs at a time):
+
+```bash
+./stt-switch.sh nemotron   # switch dictation to Nemotron
+./stt-switch.sh parakeet   # switch back to Parakeet
+./stt-switch.sh status
+```
+
 ## License
 
 MIT License

@@ -1,0 +1,22 @@
+[Unit]
+Description=Nemotron 3.5 ASR STT server (drop-in per Parakeet, stesso socket)
+# NON abilitare insieme a parakeet-stt.service: usano lo stesso socket.
+After=default.target
+
+[Service]
+Type=simple
+# Sostituisci __NEMO_HOME__ con la cartella che contiene nemotron_stt_server.py + il venv,
+# e __VENV__ con il path del venv (transformers>=5.13). Le cache HF/torch possono stare
+# su un disco con spazio (il modello pesa ~2.5GB).
+Environment=HF_HOME=__NEMO_HOME__/cache/hf
+Environment=TORCH_HOME=__NEMO_HOME__/cache/torch
+Environment=STT_SOCKET=/tmp/stt_server.sock
+Environment=STT_LANG=auto
+Environment=STT_DTYPE=bfloat16
+Environment=HF_HUB_OFFLINE=1
+ExecStart=__VENV__/bin/python __NEMO_HOME__/nemotron_stt_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
