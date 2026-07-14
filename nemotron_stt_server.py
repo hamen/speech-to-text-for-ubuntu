@@ -18,7 +18,7 @@ import json, logging, os, signal, socket, threading, time
 import numpy as np
 
 SOCKET_PATH = os.environ.get("STT_SOCKET", "/tmp/stt_server.sock")
-LANG        = os.environ.get("STT_LANG", "it-IT")
+LANG        = os.environ.get("STT_LANG", "auto")
 DTYPE_NAME  = os.environ.get("STT_DTYPE", "bfloat16")
 try:
     PAD_MS = int(os.environ.get("STT_PAD_MS", "300"))
@@ -120,7 +120,7 @@ def main():
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
-    os.chmod(SOCKET_PATH, 0o600)
+    os.chmod(SOCKET_PATH, 0o666)  # parità con stt_server.py/parakeet: client root o non-root
     logging.info(f"🐙 Nemotron STT Server listening on {SOCKET_PATH}")
     try:
         while not SHUTDOWN.is_set():

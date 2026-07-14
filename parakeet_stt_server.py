@@ -207,7 +207,7 @@ def main():
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
-    os.chmod(SOCKET_PATH, 0o600)
+    os.chmod(SOCKET_PATH, 0o666)  # accessible to user clients when run as root
     logging.info(f"🐙 Parakeet STT Server listening on {SOCKET_PATH}")
     try:
         while not SHUTDOWN.is_set():

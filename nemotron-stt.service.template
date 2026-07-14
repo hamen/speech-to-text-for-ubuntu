@@ -13,7 +13,10 @@ Environment=TORCH_HOME=__NEMO_HOME__/cache/torch
 Environment=STT_SOCKET=/tmp/stt_server.sock
 Environment=STT_LANG=auto
 Environment=STT_DTYPE=bfloat16
-Environment=HF_HUB_OFFLINE=1
+# Opzionale: HF_HUB_OFFLINE=1 velocizza l'avvio, ma SOLO dopo che il modello è già
+# in cache. Al primo avvio (cache vuota) causerebbe un restart-loop: lascialo commentato
+# finché non hai scaricato il modello almeno una volta.
+# Environment=HF_HUB_OFFLINE=1
 ExecStart=__VENV__/bin/python __NEMO_HOME__/nemotron_stt_server.py
 Restart=always
 RestartSec=3
