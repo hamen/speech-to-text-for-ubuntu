@@ -318,15 +318,15 @@ class KeyListenerLogic:
         Handle a key event.
         key_state: 1 for down, 0 for up.
         """
-        # Legacy F16 support
-        if key_code == 'KEY_F16':
+        # Legacy F16 support + Pause/Break hold-to-talk
+        if key_code in ('KEY_F16', 'KEY_PAUSE', 'KEY_SCROLLLOCK'):
             if key_state == 1: # Down
                 if not self.recording:
                     self.on_start()
                     self.recording = True
-                    self.active_trigger = 'F16'
+                    self.active_trigger = key_code
             elif key_state == 0: # Up
-                if self.recording and self.active_trigger == 'F16':
+                if self.recording and self.active_trigger == key_code:
                     self.on_stop()
                     self.recording = False
                     self.active_trigger = None
@@ -405,8 +405,8 @@ def _detect_all_keyboards() -> list[str]:
 
 def main():
     """Main function."""
-    # Check if running as root
-    if os.geteuid() != 0:
+    # Check if running as root (bypass with STT_ALLOW_NONROOT=1 for users in the input group)
+    if os.geteuid() != 0 and not os.environ.get("STT_ALLOW_NONROOT", "").lower() in ("1", "true", "yes"):
         logging.error("This script must be run as root")
         sys.exit(1)
 
@@ -576,7 +576,7 @@ def main():
 
     logic = KeyListenerLogic(on_start, on_stop, enable_double_super=ENABLE_DOUBLE_SUPER)
 
-    active_triggers = ["KEY_F16", "Double-Ctrl"]
+    active_triggers = ["KEY_F16", "KEY_PAUSE (Pause/Break)", "KEY_SCROLLLOCK (Scroll Lock)", "Double-Ctrl"]
     if logic.enable_double_super:
         active_triggers.insert(1, "Double-Super")
     logging.info(f"Listening for {' or '.join(active_triggers)} on {len(devices)} devices")

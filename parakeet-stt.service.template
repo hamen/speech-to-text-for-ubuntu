@@ -1,0 +1,20 @@
+[Unit]
+Description=Parakeet TDT STT server (onnx-asr, drop-in su /tmp/stt_server.sock)
+# NON abilitare insieme a nemotron-stt.service: usano lo stesso socket.
+After=default.target
+
+[Service]
+Type=simple
+# Sostituisci __REPO__ con la cartella del repo e __VENV__ con il venv onnx-asr
+# (vedi requirements-parakeet.txt). Il modello viene scaricato da HuggingFace al primo avvio.
+Environment=STT_SOCKET=/tmp/stt_server.sock
+Environment=STT_PARAKEET_MODEL=nemo-parakeet-tdt-0.6b-v3
+Environment=STT_PARAKEET_PROVIDER=CUDAExecutionProvider
+# LLM post-processing opzionale (richiede llama-cpp-python + un gguf); STT_LLM_POSTPROCESS=0 per disabilitare
+Environment=STT_LLM_POSTPROCESS=0
+ExecStart=__VENV__/bin/python __REPO__/parakeet_stt_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

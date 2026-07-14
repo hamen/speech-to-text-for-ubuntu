@@ -341,6 +341,78 @@ run_large_v3_gpu() {
     fi
 }
 
+run_parakeet_gpu() {
+    show_subtitle "🐙 Parakeet v3 GPU (alternativo, velocissimo)"
+    show_info "STT alternativo a Whisper: NVIDIA Parakeet-TDT-0.6B-v3 (multilingua, IT) su GPU via onnx-asr. Stesso socket: key_listener invariato, Whisper resta disponibile dal menu."
+    load_persistent_config
+
+    if ! command -v nvidia-smi &> /dev/null; then
+        echo "❌ Nessuna GPU NVIDIA — Parakeet richiede CUDA"
+        gum confirm "Torno al menu?" && return 0 || exit 0
+        return 1
+    fi
+
+    # Python con onnx-asr/onnxruntime-gpu (venv separato, non sporca quello del progetto)
+    local PK_PY="${PARAKEET_PYTHON:-$HOME/parakeet-test/venv/bin/python}"
+    if [[ ! -x "$PK_PY" ]]; then
+        echo "❌ Venv Parakeet non trovato: $PK_PY"
+        echo "   Crealo una volta:"
+        echo "     uv venv -p 3.12 ~/parakeet-test/venv"
+        echo "     ~/parakeet-test/venv/bin/pip install onnx-asr onnxruntime-gpu huggingface_hub"
+        echo "   (oppure esporta PARAKEET_PYTHON verso un python che ha onnx-asr)"
+        gum confirm "Torno al menu?" && return 0 || exit 0
+        return 1
+    fi
+
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | while IFS=, read -r name memory; do
+        echo "🎮 $name (${memory}MB VRAM)"
+    done
+    echo
+
+    if gum confirm "Avvio Speech-to-Text con Parakeet v3 GPU?"; then
+        start_ydotoold
+        [[ -f "$REPO_DIR/venv/bin/activate" ]] && source "$REPO_DIR/venv/bin/activate"
+        # impostazioni di OUTPUT/pulizia (indipendenti dal motore STT) dalla config esistente
+        [[ -f "$REPO_DIR/large-v3-config.sh" ]] && source "$REPO_DIR/large-v3-config.sh"
+        export STT_MODE="${STT_MODE:-clipboard}"
+
+        echo "🐙 Avvio server Parakeet (carica il modello una volta sola)…"
+        pkill -f "stt_server.py" 2>/dev/null || true        # ferma Whisper o un Parakeet stantio
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
+        sleep 0.5
+        nohup "$PK_PY" "$REPO_DIR/parakeet_stt_server.py" >> "$REPO_DIR/log/parakeet_stt.log" 2>&1 &
+        SERVER_PID=$!
+        echo "   Server PID: $SERVER_PID — attendo il modello…"
+        for i in {1..60}; do
+            [[ -S /tmp/stt_server.sock ]] && { echo "✅ Parakeet pronto, trascrizione attiva."; break; }
+            sleep 1
+            kill -0 $SERVER_PID 2>/dev/null || { echo "❌ Server non partito. Log:"; tail -20 "$REPO_DIR/log/parakeet_stt.log"; return 1; }
+        done
+        [[ -S /tmp/stt_server.sock ]] || { echo "❌ Timeout server Parakeet."; return 1; }
+
+        # API HTTP opzionale (inoltra al socket, va bene anche con Parakeet)
+        if [[ -f "$REPO_DIR/stt_api.py" ]]; then
+            pkill -f "python3.*stt_api.py" 2>/dev/null || true; sleep 0.3
+            nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_api.py" >> "$REPO_DIR/log/stt_api.log" 2>&1 &
+        fi
+
+        echo "🚀 Avvio key listener (Parakeet). F16 (o Doppio-Ctrl/Super) per registrare, Ctrl+C per uscire."
+        sudo STT_MODE="$STT_MODE" \
+             STT_CLEAN_TEXT="${STT_CLEAN_TEXT:-1}" \
+             STT_REMOVE_FILLERS="${STT_REMOVE_FILLERS:-1}" \
+             STT_FIX_REPETITIONS="${STT_FIX_REPETITIONS:-1}" \
+             STT_FIX_PUNCTUATION="${STT_FIX_PUNCTUATION:-1}" \
+             STT_USE_SOUND="${STT_USE_SOUND:-1}" \
+             STT_USE_NOTIFICATION="${STT_USE_NOTIFICATION:-0}" \
+             python3 "$REPO_DIR/key_listener.py"
+
+        echo "🛑 Stop server Parakeet e API…"
+        pkill -f "python3.*stt_api.py" 2>/dev/null || true
+        pkill -f "parakeet_stt_server.py" 2>/dev/null || true
+        rm -f /tmp/stt_server.sock 2>/dev/null || true
+    fi
+}
+
 run_large_v3_cpu() {
     show_subtitle "💻 Large-v3 CPU Configuration"
     show_info "Best quality transcription using large-v3 model on CPU. Saves GPU memory at the cost of slower processing."
@@ -1040,6 +1112,7 @@ main_menu() {
             "2️⃣ Run with Auto-Typing" \
             "3️⃣ Run with Manual Pasting" \
             "4️⃣ 🚀 Run Large-v3 GPU (Recommended)" \
+            "🐙 Run Parakeet v3 GPU (alternativo, veloce)" \
             "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)" \
             "6️⃣ Run in Background" \
             "7️⃣ Check System Status" \
@@ -1061,6 +1134,9 @@ main_menu() {
                 ;;
             "4️⃣ 🚀 Run Large-v3 GPU (Recommended)")
                 run_large_v3_gpu
+                ;;
+            "🐙 Run Parakeet v3 GPU (alternativo, veloce)")
+                run_parakeet_gpu
                 ;;
             "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)")
                 run_large_v3_cpu

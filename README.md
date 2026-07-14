@@ -2,6 +2,19 @@
 
 A powerful Python project that provides **push-to-talk speech recognition** using native keyboard shortcuts and automatically transcribes it to text using Faster Whisper models with **GPU acceleration** and **intelligent text cleaning**.
 
+## ✨ What's New (June 2026)
+
+**LLM post-processing pass** (`parakeet_stt_server.py`)
+
+The Parakeet server now runs a lightweight local LLM (Qwen2.5-0.5B-Instruct, ~470MB, fully on GPU) over every transcription before it reaches the clipboard. It fixes obvious speech-to-text errors and adds missing question marks — without rephrasing or rewriting.
+
+- **~150–250ms** added latency on an RTX 4070 (negligible for push-to-talk)
+- Italian and English supported out of the box
+- Safety guard: if the LLM changes more than 20% of the words, the original is kept
+- Controlled by `STT_LLM_POSTPROCESS=0/1` (default: on) and `STT_LLM_MODEL` env vars
+
+**300ms silence padding** on every recording before it's passed to Parakeet — prevents the last word from being clipped when the push-to-talk key is released while still speaking.
+
 **🎯 Key Features:**
 - **Push-to-talk recording** - Press and hold to record, release to process
 - **Native Keyboard Shortcuts** - **Double-Control** by default; optional **Double-Super** toggle in config
@@ -223,6 +236,51 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 ### X11/Xfce4 Support
 - **✅ Clipboard Fixed**: X11/Xfce4 clipboard functionality now works correctly with automatic session detection
 - **Tools Used**: `xclip` (primary) and `xsel` (fallback) for X11 clipboard operations
+
+## 🚀 Nemotron 3.5 ASR (streaming, multilingual) — Linux experiment
+
+An alternative STT backend to Whisper/Parakeet, based on **[nvidia/nemotron-3.5-asr-streaming-0.6b](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)** (FastConformer cache-aware RNNT, 40 languages, real streaming). It's a **drop-in** for the persistent server: same Unix-socket protocol as `parakeet_stt_server.py`, so `key_listener.py` / `speech_to_text.py` need **no changes**.
+
+Why it can be a nice upgrade: true cache-aware streaming, automatic language detection (handles mixed Italian/English dictation without dropping English words), and it runs in **bf16 using only ~1.4 GB VRAM** (loads in ~1s once cached).
+
+**Requires `transformers >= 5.13.0`** (native `Nemotron3_5Asr` class). The stable NeMo PyPI release does **not** ship the required model class, so use the Transformers path.
+
+### Setup (separate venv recommended)
+
+```bash
+python3.12 -m venv venv-nemotron
+./venv-nemotron/bin/pip install -r requirements-nemotron.txt
+# First run downloads the model (~2.5 GB safetensors). Point HF_HOME to a disk with space.
+```
+
+### Run
+
+```bash
+# Persistent socket server (drop-in for parakeet_stt_server.py)
+STT_LANG=auto STT_DTYPE=bfloat16 ./venv-nemotron/bin/python nemotron_stt_server.py
+
+# One-off streaming from the mic (prints partial hypotheses live, Ctrl-C to stop)
+./venv-nemotron/bin/python stream_hf.py auto
+
+# Offline transcription of a file
+./venv-nemotron/bin/python transcribe_hf.py audio.wav auto
+```
+
+Env vars: `STT_SOCKET` (default `/tmp/stt_server.sock`), `STT_LANG` (default `auto` — recommended; use a locale like `it-IT` to force a language), `STT_DTYPE` (default `bfloat16`), `STT_PAD_MS` (default `300`).
+
+### systemd (user) + switch between engines
+
+Install both user units (they bind the same socket, so only one runs at a time):
+- Copy `nemotron-stt.service.template` → `~/.config/systemd/user/nemotron-stt.service`, replacing `__NEMO_HOME__` and `__VENV__`.
+- Copy `parakeet-stt.service.template` → `~/.config/systemd/user/parakeet-stt.service`, replacing `__REPO__` and `__VENV__` (needed for `stt-switch.sh parakeet`).
+
+Then `systemctl --user daemon-reload` and switch the active dictation engine:
+
+```bash
+./stt-switch.sh nemotron   # switch dictation to Nemotron
+./stt-switch.sh parakeet   # switch back to Parakeet
+./stt-switch.sh status
+```
 
 ## License
 
