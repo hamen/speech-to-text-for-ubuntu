@@ -1,0 +1,35 @@
+# Example systemd *user* unit for the optional LLM transcript-polish server.
+#
+# It runs a warm llama-server (llama.cpp) that speech_to_text.py calls when
+# STT_LLM_POLISH=1. This file is an EXAMPLE: edit the paths to match your machine,
+# then install it as a user unit:
+#
+#   cp systemd/stt-cleanup-llm.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now stt-cleanup-llm.service
+#
+# Coupling to your STT server (optional but recommended): if you run your STT engine
+# as its own user unit, replace YOUR-STT.service below with its name (e.g.
+# nemotron-stt.service or parakeet-stt.service). With PartOf + WantedBy, enabling this
+# unit puts it in <YOUR-STT>.service.wants/, so starting the STT server starts this one,
+# and stopping/restarting the STT server stops/restarts this one too — the polish
+# server's VRAM is only held while STT is up (e.g. freed at night when STT is stopped).
+# If you don't want any coupling, delete the PartOf/After/WantedBy lines and enable this
+# unit on its own (WantedBy=default.target).
+
+[Unit]
+Description=LLM transcript-polish server (llama-server, Qwen2.5-1.5B) for speech-to-text
+After=YOUR-STT.service
+PartOf=YOUR-STT.service
+
+[Service]
+Type=simple
+# --host 127.0.0.1 keeps it local-only. -ngl 99 offloads all layers to the GPU.
+ExecStart=%h/llama.cpp/build/bin/llama-server \
+    -m %h/models/stt-postprocess/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+    -ngl 99 --host 127.0.0.1 --port 8899 -c 2048 --temp 0
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=YOUR-STT.service
