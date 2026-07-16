@@ -1,7 +1,7 @@
 # Speech-to-Text for Ubuntu - LLM Context
 
 ## App Name & Purpose
-**Speech-to-Text for Ubuntu** - A powerful push-to-talk speech recognition system that provides offline transcription using Faster Whisper models with **GPU acceleration**, **intelligent text cleaning**, **persistent model server**, and multiple output modes. Optimized for NVIDIA RTX 4070 and other CUDA GPUs.
+**Speech-to-Text for Ubuntu** - A powerful push-to-talk speech recognition system that provides offline transcription using the **NVIDIA Nemotron 3.5 ASR** model with **GPU acceleration**, **intelligent text cleaning**, **persistent model server**, and multiple output modes. Optimized for NVIDIA RTX 4070 and other CUDA GPUs.
 
 ## Platform & Environment
 - **OS**: Ubuntu 24.04.2 LTS (Linux)
@@ -23,24 +23,22 @@
 
 ## Architecture
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  key_listener   │────▶│ speech_to_text   │────▶│   stt_server    │
-│  (detects keys) │     │ (processes audio)│     │ (model in RAM)  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────────┐
+│  key_listener   │────▶│ speech_to_text   │────▶│  nemotron_stt_server │
+│  (detects keys) │     │ (processes audio)│     │    (model in RAM)    │
+└─────────────────┘     └──────────────────┘     └──────────────────────┘
                               │   Unix Socket: /tmp/stt_server.sock
 ```
-- **stt_server.py** loads the model once and keeps it in memory
-- **speech_to_text.py** automatically connects to the server (falls back to local loading if unavailable)
-- **menu.sh** starts the server automatically when launching Large-v3 mode
+- **nemotron_stt_server.py** loads the Nemotron model once and keeps it in memory; it is run as the systemd user service `nemotron-stt`.
+- **speech_to_text.py** connects to the server over the Unix socket (no local fallback).
 
 ## Key Files & Their Purpose
 
 ### Core Scripts
 - **`key_listener.py`** - Main orchestrator: listens for native hotkeys (Ctrl/Super) and legacy F16 across all devices, records audio, calls speech processing.
 - **`speech_to_text.py`** - Audio processor: loads audio, connects to STT server for transcription, handles output modes, applies intelligent text cleaning.
-- **`stt_server.py`** - **Persistent model server**: keeps Whisper model in memory, handles transcription requests via Unix socket for instant response.
-- **`menu.sh`** - Beautiful interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management. Automatically starts the persistent server.
-- **`large-v3-config.sh`** - Optimized configuration for RTX 4070 with best quality transcription and automatic cuDNN detection.
+- **`nemotron_stt_server.py`** - **Persistent model server**: keeps the Nemotron model in memory, handles transcription requests via the Unix socket for instant response. Run as the systemd user service `nemotron-stt`.
+- **`menu.sh`** - Interactive interface using [Gum](https://github.com/charmbracelet/gum) for setup and management (legacy; the server is normally managed by systemd).
 
 ### Configuration & Logs
 - **`log/`** - Dedicated directory for all system logs (gitignored).
@@ -56,7 +54,7 @@
 - **Log Files**: `log/key_listener.log`, `log/speech_to_text.log`, `log/stt_server.log`
 - **Output File**: `/tmp/speech_to_text_output.txt`
 - **Python Venv**: `venv/bin/python3`
-- **GPU Model**: large-v3 (best quality, ~3GB VRAM usage)
+- **Model**: NVIDIA Nemotron 3.5 ASR (~2.5GB in cache)
 - **GPU Device**: cuda (GPU acceleration)
 - **Language**: auto (automatic detection, supports 99 languages)
 
@@ -77,12 +75,11 @@ After launching, you can immediately use the **Double-Tap Control** shortcut.
 
 ## Environment Variables for Tuning
 
-### Model Configuration
-- `STT_MODEL` (default: `large-v3`) - Whisper model size.
-- `STT_DEVICE` (default: `cuda`) - Processing device.
-- `STT_COMPUTE_TYPE` (default: `float16`) - Optimized for RTX 4070.
-- `STT_BEAM_SIZE` (default: `5`) - Higher values = better accuracy.
-- `STT_LANGUAGE` (default: `auto`) - Language code or `auto` for detection. Examples: `en`, `it`, `es`, `de`, `fr`.
+### Nemotron Server Configuration (nemotron_stt_server.py)
+- `STT_SOCKET` (default: `/tmp/stt_server.sock`) - Unix socket path shared with the client.
+- `STT_LANG` (default: `auto`) - Language, or a locale such as `it-IT` to force one.
+- `STT_DTYPE` (default: `bfloat16`) - Inference dtype; use `float32` as a fallback.
+- `STT_PAD_MS` (default: `300`) - Silence padding to avoid clipping the last word.
 
 ### Text Cleaning Configuration
 - `STT_CLEAN_TEXT` (default: `1`) - Enable/disable text cleaning.
@@ -101,18 +98,17 @@ After launching, you can immediately use the **Double-Tap Control** shortcut.
 # View logs
 tail -f log/key_listener.log
 tail -f log/speech_to_text.log
-tail -f log/stt_server.log
+journalctl --user -u nemotron-stt -f
 
-# Check if STT server is running
+# Check if the Nemotron STT server is running
 ls -la /tmp/stt_server.sock
-pgrep -f stt_server.py
+pgrep -f nemotron_stt_server.py
+systemctl --user status nemotron-stt
 
 # Test native keys detection (run as root)
 sudo ./venv/bin/python3 test_key_logic.py
 ```
 
 ## Performance
-| Mode | Transcription Time | Notes |
-|------|-------------------|-------|
-| With persistent server | ~0.4s | Model stays in memory |
-| Without server | ~2.6s | Model loads each time |
+The Nemotron server keeps the model in memory, so transcription is near-instant
+after the first request (no per-request model reload).

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple speech-to-text processor using Faster Whisper. For speed we use the tiny.en model.
+Simple speech-to-text processor. Transcription is delegated to the persistent Nemotron
+STT server over a Unix socket; there is no local fallback engine.
 
 The script expects an audio file (e.g. /tmp/recorded_audio.wav) as an argument.
 
@@ -56,10 +57,9 @@ logging.basicConfig(
 try:
     import numpy as np
     import soundfile as sf
-    from faster_whisper import WhisperModel
 except ImportError as e:
     print(f"Error: Required library not found: {e}")
-    print("Install in your venv with: pip install numpy pyautogui soundfile faster-whisper")
+    print("Install in your venv with: pip install numpy pyautogui soundfile")
     sys.exit(1)
 
 def clean_transcribed_text(text: str) -> str:
@@ -317,59 +317,21 @@ def _try_server_transcription(audio_file: str) -> list | None:
 
 
 def transcribe_audio(audio, audio_file: str = None):
-    """Transcribe audio using Whisper. Uses persistent server if available."""
-    
-    # Try the persistent server first (much faster - model already loaded)
-    if audio_file:
-        server_result = _try_server_transcription(audio_file)
-        if server_result is not None:
-            return server_result
-        logging.info("Falling back to local model (server unavailable)")
-    
-    # Fall back to loading model locally
-    try:
-        model_name = os.environ.get("STT_MODEL", "tiny.en")
-        device = os.environ.get("STT_DEVICE", "cpu")
-        compute_type = os.environ.get(
-            "STT_COMPUTE_TYPE",
-            "float16" if device != "cpu" else "int8",
-        )
-        logging.info(
-            f"Loading Whisper model: name={model_name} device={device} compute_type={compute_type}"
-        )
-        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    """Transcribe audio via the persistent Nemotron STT server (Unix socket).
 
-        logging.info("Starting transcription...")
-        beam_size = int(os.environ.get("STT_BEAM_SIZE", "1"))
-        vad_filter = os.environ.get("STT_VAD", "1").lower() in ("1", "true", "yes")
-        language_raw = os.environ.get("STT_LANGUAGE", "en")
-        language = language_raw if language_raw.lower() not in ("auto", "", "none") else None
-        condition = os.environ.get("STT_CONDITION", "1").lower() in ("1", "true", "yes")
-        temperature = float(os.environ.get("STT_TEMPERATURE", "0.0"))
-        segments, _ = model.transcribe(
-            audio,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=vad_filter,
-            condition_on_previous_text=condition,
-            temperature=temperature,
-            task="transcribe",
-        )
-
-        # Process segments
-        results = []
-        for seg in segments:
-            text = seg.text.strip()
-            if text:
-                results.append(text)
-                logging.info(f"Recognized: {text}")
-
-        logging.info(f"Transcription completed: {len(results)} segments")
-        return results
-
-    except Exception as e:
-        logging.error(f"Transcription failed: {e}")
+    Nemotron-only: there is no local fallback. If the server is unavailable the
+    dictation fails loudly rather than silently degrading to a worse local model.
+    """
+    if not audio_file:
+        logging.error("No audio file provided; cannot reach the STT server")
         sys.exit(1)
+
+    server_result = _try_server_transcription(audio_file)
+    if server_result is not None:
+        return server_result
+
+    logging.error(f"Nemotron STT server unavailable at {STT_SERVER_SOCKET} — no fallback")
+    sys.exit(1)
 
 def _type_with_wtype(text: str) -> bool:
     """Try to type using wtype (Wayland). Returns True if succeeded."""
@@ -692,7 +654,7 @@ def main():
     # Load audio
     audio = load_audio(audio_file)
 
-    # Transcribe (tries persistent server first, falls back to local model)
+    # Transcribe via the persistent Nemotron server (no local fallback)
     segments = transcribe_audio(audio, audio_file=audio_file)
 
     # Combine segments into one text line

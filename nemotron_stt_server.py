@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent Nemotron 3.5 ASR STT server — drop-in per parakeet_stt_server.py.
+"""Persistent Nemotron 3.5 ASR STT server (the only STT engine).
 
 Parla lo STESSO protocollo Unix-socket di key_listener.py / speech_to_text.py:
   request : {"audio_path": "<wav>"}\n   (o "audio_file", compat legacy)
@@ -132,7 +132,7 @@ def main():
     server.bind(SOCKET_PATH)
     server.listen(5)
     server.settimeout(1.0)
-    os.chmod(SOCKET_PATH, 0o666)  # parità con stt_server.py/parakeet: client root o non-root
+    os.chmod(SOCKET_PATH, 0o666)  # socket usable by both root and non-root clients
     logging.info(f"🐙 Nemotron STT Server listening on {SOCKET_PATH}")
     try:
         while not SHUTDOWN.is_set():

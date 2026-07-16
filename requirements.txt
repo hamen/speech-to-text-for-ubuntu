@@ -4,7 +4,6 @@ numpy
 soundfile
 pyautogui
 evdev
-faster-whisper
 
 # GPU acceleration (CUDA 12.1 compatible)
 # Note: PyTorch will be installed separately via run.sh for optimal CUDA support

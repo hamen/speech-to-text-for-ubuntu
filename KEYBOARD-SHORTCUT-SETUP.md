@@ -61,9 +61,10 @@ input-remapper-gtk
 6. **Enable the preset** (toggle switch at the top)
 
 ### Step 3: Test
-1. Run your speech-to-text: `sudo ./launch-large-v3.sh`
-2. Press **Ctrl+Alt+F12**
-3. The system should detect it as F16 and start recording
+1. Make sure the Nemotron STT server is running: `systemctl --user start nemotron-stt`
+2. Run the key listener: `sudo -E python3 key_listener.py`
+3. Press **Ctrl+Alt+F12**
+4. The system should detect it as F16 and start recording
 
 ## Troubleshooting
 
@@ -103,38 +104,9 @@ input-remapper-control --command start
 - **Preset file**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **Main config**: `~/.config/input-remapper/config.json`
 
-## Language Configuration
-
-The system supports **99 languages** including Italian, German, Spanish, French, and more.
-
-### Auto-Detect Language (Default)
-The default configuration now uses **automatic language detection**. Just speak in any language and it will be transcribed correctly.
-
-### Force a Specific Language
-If you primarily speak one language, you can set it explicitly for slightly better accuracy:
-
-```bash
-# Italian
-export STT_LANGUAGE="it"
-
-# German
-export STT_LANGUAGE="de"
-
-# Spanish
-export STT_LANGUAGE="es"
-
-# French
-export STT_LANGUAGE="fr"
-
-# Auto-detect (default)
-export STT_LANGUAGE="auto"
-```
-
-To make this permanent, add the line to your `~/.config/speech-to-text/config.conf` file.
-
 ## Notes
 
 - The mapping persists across reboots once enabled in input-remapper GUI
-- You may need to run `sudo ./launch-large-v3.sh` as root for key detection
+- You may need to run `sudo -E python3 key_listener.py` as root for key detection
 - If Ctrl+Alt+F12 doesn't work, try restarting input-remapper service
 - For Xfce/X11, input-remapper works reliably for key combination mapping

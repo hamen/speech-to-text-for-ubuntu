@@ -165,323 +165,33 @@ run_with_clipboard() {
     fi
 }
 
-run_large_v3_gpu() {
-    show_subtitle "🚀 Large-v3 GPU Configuration"
-    show_info "Best quality transcription using large-v3 model with GPU acceleration, manual pasting, and intelligent text cleaning."
+run_nemotron() {
+    show_subtitle "🎙️ Nemotron Speech-to-Text"
+    show_info "Transcription is served by the Nemotron STT server over the Unix socket /tmp/stt_server.sock. The server runs as the systemd user service 'nemotron-stt'."
     load_persistent_config
 
-    # Check if GPU is available
-    if ! command -v nvidia-smi &> /dev/null; then
-        echo "❌ No NVIDIA GPU detected"
-        echo "   This configuration requires GPU acceleration"
+    # The Nemotron server must already be running (managed by systemd).
+    if [[ ! -S /tmp/stt_server.sock ]]; then
+        echo "❌ Nemotron STT server socket not found: /tmp/stt_server.sock"
+        echo "   Start the server first:"
+        echo "     systemctl --user start nemotron-stt"
         echo
         gum confirm "Return to main menu?" && return 0 || exit 0
         return 1
     fi
-
-    echo "🎮 GPU Detected:"
-    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | while IFS=, read -r name memory; do
-        echo "   $name (${memory}MB VRAM)"
-    done
+    echo "✅ Nemotron STT server socket found: /tmp/stt_server.sock"
     echo
 
-        if gum confirm "Launch Large-v3 GPU Speech-to-Text System?"; then
+    if gum confirm "Launch key listener (Nemotron)?"; then
         start_ydotoold
 
-        echo "🎯 Loading Large-v3 GPU Configuration..."
-
-        # Activate virtual environment first
-        if [[ -f "$REPO_DIR/venv/bin/activate" ]]; then
-            echo "🔌 Activating virtual environment..."
-            source "$REPO_DIR/venv/bin/activate"
-            echo "✅ Virtual environment activated"
-        else
-            echo "⚠️  Virtual environment not found, creating one..."
-            python3 -m venv "$REPO_DIR/venv"
-            source "$REPO_DIR/venv/bin/activate"
-            echo "✅ Virtual environment created and activated"
-        fi
-
-        # Load the large-v3 configuration
-        if [[ -f "$REPO_DIR/large-v3-config.sh" ]]; then
-            source "$REPO_DIR/large-v3-config.sh"
-            echo "✅ Configuration loaded successfully"
-        else
-            echo "⚠️  large-v3-config.sh not found, using default settings"
-            export STT_MODEL="large-v3"
-            export STT_DEVICE="cuda"
-            export STT_COMPUTE_TYPE="float16"
-            export STT_BEAM_SIZE="5"
-            export STT_LANGUAGE="auto"
-            export STT_MODE="clipboard"
-            export STT_CLEAN_TEXT="1"
-            export STT_REMOVE_FILLERS="1"
-            export STT_FIX_REPETITIONS="1"
-            export STT_FIX_PUNCTUATION="1"
-            export STT_VAD="1"
-            export STT_TEMPERATURE="0.0"
-            export STT_USE_SOUND="1"
-            export STT_USE_NOTIFICATION="0"
-        fi
-
-        # Ensure required packages are installed
-        echo "📚 Checking Python dependencies..."
-        pip install -r "$REPO_DIR/requirements.txt" --quiet
-        echo "✅ Dependencies verified"
-
-        echo ""
-        echo "🎯 Final Configuration:"
-        echo "======================="
-        echo "   Model: $STT_MODEL"
-        echo "   Device: $STT_DEVICE"
-        echo "   Compute Type: $STT_COMPUTE_TYPE"
-        echo "   Beam Size: $STT_BEAM_SIZE"
-        echo "   Language: $STT_LANGUAGE (auto = detect, en = English, it = Italian)"
-        echo "   Output Mode: $STT_MODE"
-        echo "   Text Cleaning: $STT_CLEAN_TEXT"
-        echo ""
-
-        echo "🚀 Launching Large-v3 Speech-to-Text System..."
+        echo "🚀 Launching key listener..."
         echo "   Press F16 (or Double-Control or Double-Super) to start recording"
         echo "   Press Ctrl+C to stop"
-        echo ""
-        echo "💡 Features:"
-        echo "   • Best quality transcription with large-v3 model"
-        echo "   • GPU acceleration for fast processing"
-        echo "   • Multilingual support (99 languages including Italian)"
-        echo "   • Intelligent text cleaning (removes fillers, fixes stuttering)"
-        echo "   • Manual pasting mode (reliable clipboard + notification)"
-        echo "   • ⚡ Persistent model server (instant transcription)"
-        echo ""
+        echo
 
-        # Start the persistent STT server in background (loads model once)
-        echo "🔄 Starting persistent STT server (model stays in memory)..."
-        
-        # Kill any existing server
-        pkill -f "python3.*stt_server.py" 2>/dev/null || true
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
-        sleep 0.5
-        
-        # Start server with all STT_ environment variables
-        STT_MODEL="$STT_MODEL" \
-        STT_DEVICE="$STT_DEVICE" \
-        STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
-        STT_BEAM_SIZE="$STT_BEAM_SIZE" \
-        STT_LANGUAGE="$STT_LANGUAGE" \
-        STT_VAD="$STT_VAD" \
-        STT_TEMPERATURE="$STT_TEMPERATURE" \
-        nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_server.py" >> "$REPO_DIR/log/stt_server.log" 2>&1 &
-        
-        SERVER_PID=$!
-        echo "   Server PID: $SERVER_PID"
-        
-        # Wait for server to be ready (socket file appears)
-        echo "   Waiting for model to load..."
-        for i in {1..60}; do
-            if [[ -S /tmp/stt_server.sock ]]; then
-                echo "✅ STT server ready! Model loaded and waiting for requests."
-                break
-            fi
-            sleep 1
-            # Check if server died
-            if ! kill -0 $SERVER_PID 2>/dev/null; then
-                echo "❌ Server failed to start. Check log/stt_server.log"
-                cat "$REPO_DIR/log/stt_server.log" | tail -20
-                return 1
-            fi
-        done
-        
-        if [[ ! -S /tmp/stt_server.sock ]]; then
-            echo "❌ Server timeout. Check log/stt_server.log"
-            return 1
-        fi
-
-        # Start the OpenAI-compatible HTTP API wrapper
-        if [[ -f "$REPO_DIR/stt_api.py" ]]; then
-            echo "🌐 Starting OpenAI-compatible Whisper API on port ${STT_API_PORT:-8787}..."
-            pkill -f "python3.*stt_api.py" 2>/dev/null || true
-            sleep 0.3
-            nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_api.py" >> "$REPO_DIR/log/stt_api.log" 2>&1 &
-            API_PID=$!
-            sleep 1
-            if kill -0 $API_PID 2>/dev/null; then
-                echo "✅ Whisper API ready at http://localhost:${STT_API_PORT:-8787}/v1"
-                echo "   Set OPENAI_WHISPER_BASE_URL=http://localhost:${STT_API_PORT:-8787}/v1 to use with summarize"
-            else
-                echo "⚠️  Whisper API failed to start (non-critical). Check log/stt_api.log"
-            fi
-        fi
-
-        echo ""
-
-        # Launch the key listener with large-v3 configuration
-        # Pass all STT_ environment variables explicitly to sudo
-        # Note: speech_to_text.py will automatically use the server
-        sudo STT_MODEL="$STT_MODEL" \
-             STT_DEVICE="$STT_DEVICE" \
-             STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
-             STT_BEAM_SIZE="$STT_BEAM_SIZE" \
-             STT_LANGUAGE="$STT_LANGUAGE" \
-             STT_MODE="$STT_MODE" \
-             STT_CLEAN_TEXT="$STT_CLEAN_TEXT" \
-             STT_REMOVE_FILLERS="$STT_REMOVE_FILLERS" \
-             STT_FIX_REPETITIONS="$STT_FIX_REPETITIONS" \
-             STT_FIX_PUNCTUATION="$STT_FIX_PUNCTUATION" \
-             STT_VAD="$STT_VAD" \
-             STT_TEMPERATURE="$STT_TEMPERATURE" \
-             STT_USE_SOUND="$STT_USE_SOUND" \
-             STT_USE_NOTIFICATION="$STT_USE_NOTIFICATION" \
-             python3 "$REPO_DIR/key_listener.py"
-        
-        # Cleanup server and API when key listener exits
-        echo "🛑 Stopping STT server and API..."
-        pkill -f "python3.*stt_api.py" 2>/dev/null || true
-        pkill -f "python3.*stt_server.py" 2>/dev/null || true
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
-    fi
-}
-
-run_parakeet_gpu() {
-    show_subtitle "🐙 Parakeet v3 GPU (alternativo, velocissimo)"
-    show_info "STT alternativo a Whisper: NVIDIA Parakeet-TDT-0.6B-v3 (multilingua, IT) su GPU via onnx-asr. Stesso socket: key_listener invariato, Whisper resta disponibile dal menu."
-    load_persistent_config
-
-    if ! command -v nvidia-smi &> /dev/null; then
-        echo "❌ Nessuna GPU NVIDIA — Parakeet richiede CUDA"
-        gum confirm "Torno al menu?" && return 0 || exit 0
-        return 1
-    fi
-
-    # Python con onnx-asr/onnxruntime-gpu (venv separato, non sporca quello del progetto)
-    local PK_PY="${PARAKEET_PYTHON:-$HOME/parakeet-test/venv/bin/python}"
-    if [[ ! -x "$PK_PY" ]]; then
-        echo "❌ Venv Parakeet non trovato: $PK_PY"
-        echo "   Crealo una volta:"
-        echo "     uv venv -p 3.12 ~/parakeet-test/venv"
-        echo "     ~/parakeet-test/venv/bin/pip install onnx-asr onnxruntime-gpu huggingface_hub"
-        echo "   (oppure esporta PARAKEET_PYTHON verso un python che ha onnx-asr)"
-        gum confirm "Torno al menu?" && return 0 || exit 0
-        return 1
-    fi
-
-    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | while IFS=, read -r name memory; do
-        echo "🎮 $name (${memory}MB VRAM)"
-    done
-    echo
-
-    if gum confirm "Avvio Speech-to-Text con Parakeet v3 GPU?"; then
-        start_ydotoold
-        [[ -f "$REPO_DIR/venv/bin/activate" ]] && source "$REPO_DIR/venv/bin/activate"
-        # impostazioni di OUTPUT/pulizia (indipendenti dal motore STT) dalla config esistente
-        [[ -f "$REPO_DIR/large-v3-config.sh" ]] && source "$REPO_DIR/large-v3-config.sh"
-        export STT_MODE="${STT_MODE:-clipboard}"
-
-        echo "🐙 Avvio server Parakeet (carica il modello una volta sola)…"
-        pkill -f "stt_server.py" 2>/dev/null || true        # ferma Whisper o un Parakeet stantio
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
-        sleep 0.5
-        nohup "$PK_PY" "$REPO_DIR/parakeet_stt_server.py" >> "$REPO_DIR/log/parakeet_stt.log" 2>&1 &
-        SERVER_PID=$!
-        echo "   Server PID: $SERVER_PID — attendo il modello…"
-        for i in {1..60}; do
-            [[ -S /tmp/stt_server.sock ]] && { echo "✅ Parakeet pronto, trascrizione attiva."; break; }
-            sleep 1
-            kill -0 $SERVER_PID 2>/dev/null || { echo "❌ Server non partito. Log:"; tail -20 "$REPO_DIR/log/parakeet_stt.log"; return 1; }
-        done
-        [[ -S /tmp/stt_server.sock ]] || { echo "❌ Timeout server Parakeet."; return 1; }
-
-        # API HTTP opzionale (inoltra al socket, va bene anche con Parakeet)
-        if [[ -f "$REPO_DIR/stt_api.py" ]]; then
-            pkill -f "python3.*stt_api.py" 2>/dev/null || true; sleep 0.3
-            nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_api.py" >> "$REPO_DIR/log/stt_api.log" 2>&1 &
-        fi
-
-        echo "🚀 Avvio key listener (Parakeet). F16 (o Doppio-Ctrl/Super) per registrare, Ctrl+C per uscire."
-        sudo STT_MODE="$STT_MODE" \
-             STT_CLEAN_TEXT="${STT_CLEAN_TEXT:-1}" \
-             STT_REMOVE_FILLERS="${STT_REMOVE_FILLERS:-1}" \
-             STT_FIX_REPETITIONS="${STT_FIX_REPETITIONS:-1}" \
-             STT_FIX_PUNCTUATION="${STT_FIX_PUNCTUATION:-1}" \
-             STT_USE_SOUND="${STT_USE_SOUND:-1}" \
-             STT_USE_NOTIFICATION="${STT_USE_NOTIFICATION:-0}" \
-             python3 "$REPO_DIR/key_listener.py"
-
-        echo "🛑 Stop server Parakeet e API…"
-        pkill -f "python3.*stt_api.py" 2>/dev/null || true
-        pkill -f "parakeet_stt_server.py" 2>/dev/null || true
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
-    fi
-}
-
-run_large_v3_cpu() {
-    show_subtitle "💻 Large-v3 CPU Configuration"
-    show_info "Best quality transcription using large-v3 model on CPU. Saves GPU memory at the cost of slower processing."
-    load_persistent_config
-
-    if gum confirm "Launch Large-v3 CPU Speech-to-Text System?"; then
-        start_ydotoold
-
-        echo "🎯 Loading Large-v3 CPU Configuration..."
-
-        # Activate virtual environment
-        if [[ -f "$REPO_DIR/venv/bin/activate" ]]; then
-            source "$REPO_DIR/venv/bin/activate"
-        fi
-
-        # Load the CPU configuration
-        if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
-            source "$REPO_DIR/large-v3-cpu-config.sh"
-            echo "✅ Configuration loaded successfully"
-        else
-            echo "⚠️  large-v3-cpu-config.sh not found, using defaults"
-            export STT_MODEL="large-v3"
-            export STT_DEVICE="cpu"
-            export STT_COMPUTE_TYPE="int8"
-            export STT_BEAM_SIZE="5"
-            export STT_LANGUAGE="auto"
-            export STT_MODE="clipboard"
-            export STT_CLEAN_TEXT="1"
-        fi
-
-        echo "🚀 Launching Large-v3 CPU STT System..."
-        
-        # Start persistent STT server in background
-        pkill -f "python3.*stt_server.py" 2>/dev/null || true
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
-        
-        STT_MODEL="$STT_MODEL" \
-        STT_DEVICE="$STT_DEVICE" \
-        STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
-        STT_BEAM_SIZE="$STT_BEAM_SIZE" \
-        STT_LANGUAGE="$STT_LANGUAGE" \
-        nohup "$REPO_DIR/venv/bin/python3" "$REPO_DIR/stt_server.py" >> "$REPO_DIR/log/stt_server.log" 2>&1 &
-        
-        SERVER_PID=$!
-        
-        # Wait for server
-        for i in {1..60}; do
-            if [[ -S /tmp/stt_server.sock ]]; then
-                echo "✅ STT server ready!"
-                break
-            fi
-            sleep 1
-            if ! kill -0 $SERVER_PID 2>/dev/null; then
-                echo "❌ Server failed to start."
-                return 1
-            fi
-        done
-
-        sudo STT_MODEL="$STT_MODEL" \
-             STT_DEVICE="$STT_DEVICE" \
-             STT_COMPUTE_TYPE="$STT_COMPUTE_TYPE" \
-             STT_BEAM_SIZE="$STT_BEAM_SIZE" \
-             STT_LANGUAGE="$STT_LANGUAGE" \
-             STT_MODE="$STT_MODE" \
-             STT_CLEAN_TEXT="$STT_CLEAN_TEXT" \
-             python3 "$REPO_DIR/key_listener.py"
-        
-        pkill -f "python3.*stt_server.py" 2>/dev/null || true
-        rm -f /tmp/stt_server.sock 2>/dev/null || true
+        # speech_to_text.py talks to the Nemotron server over the socket.
+        sudo -E python3 "$REPO_DIR/key_listener.py"
     fi
 }
 
@@ -492,8 +202,6 @@ run_background() {
     local mode_choice=$(gum choose \
         "Auto-typing mode" \
         "Clipboard mode" \
-        "Large-v3 GPU mode" \
-        "Large-v3 CPU mode" \
         "Cancel")
 
     case "$mode_choice" in
@@ -510,34 +218,6 @@ run_background() {
             echo "🔄 Starting key listener in background with clipboard mode..."
             STT_MODE="clipboard" nohup sudo -E python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
             echo "✅ Key listener started in background (PID: $!)"
-            echo "   Logs: $REPO_DIR/log/key_listener.log"
-            echo "   To stop: sudo pkill -f 'python3 key_listener.py'"
-            ;;
-        "Large-v3 GPU mode")
-            start_ydotoold
-            echo "🔄 Starting Large-v3 GPU key listener in background..."
-
-            # Load configuration for background mode
-            if [[ -f "$REPO_DIR/large-v3-config.sh" ]]; then
-                source "$REPO_DIR/large-v3-config.sh"
-            fi
-
-            nohup sudo -E python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
-            echo "✅ Large-v3 GPU key listener started in background (PID: $!)"
-            echo "   Logs: $REPO_DIR/log/key_listener.log"
-            echo "   To stop: sudo pkill -f 'python3 key_listener.py'"
-            ;;
-        "Large-v3 CPU mode")
-            start_ydotoold
-            echo "🔄 Starting Large-v3 CPU key listener in background..."
-
-            # Load configuration for background mode
-            if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
-                source "$REPO_DIR/large-v3-cpu-config.sh"
-            fi
-
-            nohup sudo -E python3 "$REPO_DIR/key_listener.py" >/tmp/key_listener.launch.log 2>&1 &
-            echo "✅ Large-v3 CPU key listener started in background (PID: $!)"
             echo "   Logs: $REPO_DIR/log/key_listener.log"
             echo "   To stop: sudo pkill -f 'python3 key_listener.py'"
             ;;
@@ -601,17 +281,13 @@ check_status() {
         fi
     done
 
-    # Check for large-v3 configurations
-    if [[ -f "$REPO_DIR/large-v3-config.sh" ]]; then
-        echo "   ✅ large-v3-config.sh (GPU)"
+    echo
+    # Check Nemotron STT server socket
+    if [[ -S /tmp/stt_server.sock ]]; then
+        echo "✅ Nemotron STT server socket exists: /tmp/stt_server.sock"
     else
-        echo "   ❌ large-v3-config.sh (GPU)"
-    fi
-
-    if [[ -f "$REPO_DIR/large-v3-cpu-config.sh" ]]; then
-        echo "   ✅ large-v3-cpu-config.sh (CPU)"
-    else
-        echo "   ❌ large-v3-cpu-config.sh (CPU)"
+        echo "❌ Nemotron STT server socket missing: /tmp/stt_server.sock"
+        echo "   Start it with: systemctl --user start nemotron-stt"
     fi
 
     echo
@@ -1035,24 +711,6 @@ kill_background_service() {
     gum confirm "Return to main menu?" && return 0 || exit 0
 }
 
-test_large_v3() {
-    show_subtitle "🧪 Test Large-v3 Configuration"
-    show_info "This will test your large-v3 GPU configuration, including model loading and text cleaning."
-
-    if gum confirm "Run Large-v3 configuration test?"; then
-        if [[ -f "$REPO_DIR/test-large-v3.sh" ]]; then
-            echo "🧪 Running Large-v3 configuration test..."
-            echo ""
-            ./test-large-v3.sh
-        else
-            echo "❌ test-large-v3.sh not found"
-            echo "   Please ensure the test script exists"
-        fi
-        echo
-        gum confirm "Return to main menu?" && return 0 || exit 0
-    fi
-}
-
 manage_configuration() {
     show_subtitle "Configuration Management"
     show_info "Manage your speech-to-text preferences including sound vs notifications, text cleaning, and model settings."
@@ -1075,27 +733,22 @@ show_help() {
 Speech-to-Text for Ubuntu
 
 This system provides push-to-talk speech recognition using:
-• Faster Whisper for transcription
+• The Nemotron STT server (Unix socket /tmp/stt_server.sock)
 • Multiple input methods (auto-typing or clipboard)
 • Wayland/X11 compatibility
 
-Available Modes:
+The Nemotron server runs as the systemd user service 'nemotron-stt'.
+Start it with: systemctl --user start nemotron-stt
+
+Available Output Modes:
 1. Auto-typing: Text appears automatically in focused window
 2. Clipboard: Text copied to clipboard with notification
-3. Large-v3 GPU: Best quality with GPU acceleration + text cleaning
-4. Large-v3 CPU: Best quality on CPU (saves GPU memory, slower processing)
 
 Hotkey: Shift+Ctrl+F12 (mapped to F16)
 • Press and hold to record
 • Release to process and output
 
-Large-v3 GPU Features:
-• Best accuracy using large-v3 model
-• GPU acceleration for fast processing
-• Intelligent text cleaning (removes fillers, fixes stuttering)
-• Manual pasting mode for reliability
-
-For more details, see README.md and LARGE-V3-SETUP.md
+For more details, see README.md.
 EOF
 
     echo
@@ -1111,16 +764,13 @@ main_menu() {
             "1️⃣ Install Dependencies" \
             "2️⃣ Run with Auto-Typing" \
             "3️⃣ Run with Manual Pasting" \
-            "4️⃣ 🚀 Run Large-v3 GPU (Recommended)" \
-            "🐙 Run Parakeet v3 GPU (alternativo, veloce)" \
-            "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)" \
-            "6️⃣ Run in Background" \
-            "7️⃣ Check System Status" \
-            "8️⃣ 🛑 Stop Background Service" \
-            "9️⃣ 🧪 Test Large-v3 Configuration" \
-            "🔟 ⚙️  Configuration Management" \
-            "1️⃣1️⃣ Help & Information" \
-            "1️⃣2️⃣ Exit")
+            "4️⃣ 🎙️ Run Nemotron STT" \
+            "5️⃣ Run in Background" \
+            "6️⃣ Check System Status" \
+            "7️⃣ 🛑 Stop Background Service" \
+            "8️⃣ ⚙️  Configuration Management" \
+            "9️⃣ Help & Information" \
+            "🔟 Exit")
 
         case "$choice" in
             "1️⃣ Install Dependencies")
@@ -1132,34 +782,25 @@ main_menu() {
             "3️⃣ Run with Manual Pasting")
                 run_with_clipboard
                 ;;
-            "4️⃣ 🚀 Run Large-v3 GPU (Recommended)")
-                run_large_v3_gpu
+            "4️⃣ 🎙️ Run Nemotron STT")
+                run_nemotron
                 ;;
-            "🐙 Run Parakeet v3 GPU (alternativo, veloce)")
-                run_parakeet_gpu
-                ;;
-            "5️⃣ 💻 Run Large-v3 CPU (Save VRAM)")
-                run_large_v3_cpu
-                ;;
-            "6️⃣ Run in Background")
+            "5️⃣ Run in Background")
                 run_background
                 ;;
-            "7️⃣ Check System Status")
+            "6️⃣ Check System Status")
                 check_status
                 ;;
-            "8️⃣ 🛑 Stop Background Service")
+            "7️⃣ 🛑 Stop Background Service")
                 kill_background_service
                 ;;
-            "9️⃣ 🧪 Test Large-v3 Configuration")
-                test_large_v3
-                ;;
-            "🔟 ⚙️  Configuration Management")
+            "8️⃣ ⚙️  Configuration Management")
                 manage_configuration
                 ;;
-            "1️⃣1️⃣ Help & Information")
+            "9️⃣ Help & Information")
                 show_help
                 ;;
-            "1️⃣2️⃣ Exit")
+            "🔟 Exit")
                 echo "👋 Goodbye!"
                 exit 0
                 ;;
@@ -1178,20 +819,14 @@ case "${1:-}" in
     clipboard)
         run_with_clipboard
         ;;
-    large-v3)
-        run_large_v3_gpu
-        ;;
-    large-v3-cpu)
-        run_large_v3_cpu
+    nemotron)
+        run_nemotron
         ;;
     background)
         run_background
         ;;
     status)
         check_status
-        ;;
-    test-large-v3)
-        test_large_v3
         ;;
     help)
         show_help

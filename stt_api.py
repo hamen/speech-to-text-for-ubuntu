@@ -3,7 +3,7 @@
 OpenAI-compatible HTTP API for the local STT server.
 
 Exposes POST /v1/audio/transcriptions (OpenAI Whisper API format)
-and proxies requests to the existing Unix socket STT server.
+and proxies requests to the existing Nemotron Unix socket STT server.
 
 Usage:
     python3 stt_api.py
@@ -33,7 +33,7 @@ logging.basicConfig(
 SOCKET_PATH = "/tmp/stt_server.sock"
 PORT = int(os.environ.get("STT_API_PORT", "8787"))
 
-app = FastAPI(title="Local Whisper API", description="OpenAI-compatible wrapper for faster-whisper on GPU")
+app = FastAPI(title="Local Nemotron STT API", description="OpenAI-compatible wrapper for the Nemotron STT server on GPU")
 
 
 def transcribe_via_socket(audio_path: str) -> dict:
@@ -66,7 +66,7 @@ async def list_models():
         "object": "list",
         "data": [
             {
-                "id": "whisper-large-v3",
+                "id": "nemotron-3.5",
                 "object": "model",
                 "owned_by": "local",
             }
@@ -77,7 +77,7 @@ async def list_models():
 @app.post("/v1/audio/transcriptions")
 async def transcribe(
     file: UploadFile = File(...),
-    model: str = Form("whisper-large-v3"),
+    model: str = Form("nemotron-3.5"),
     language: str = Form(None),
     response_format: str = Form("json"),
     temperature: float = Form(0.0),
@@ -134,6 +134,6 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    logging.info(f"Starting OpenAI-compatible Whisper API on port {PORT}")
+    logging.info(f"Starting OpenAI-compatible Nemotron STT API on port {PORT}")
     logging.info(f"Set OPENAI_WHISPER_BASE_URL=http://localhost:{PORT}/v1")
     uvicorn.run(app, host="0.0.0.0", port=PORT)

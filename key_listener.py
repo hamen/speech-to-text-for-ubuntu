@@ -33,7 +33,8 @@ Usage (as root): python3 key_listener.py
 Tested on Ubuntu 24.04.2 LTS
 
 The script assumes that the user has a python virtual environment in /home/david/venv/bin/python3
-with the necessary packages installed including evdev, numpy pyautogui soundfile faster-whisper
+with the necessary packages installed including evdev, numpy, pyautogui, soundfile. Transcription
+is handled by the Nemotron STT server over the Unix socket /tmp/stt_server.sock.
 """
 
 import logging
