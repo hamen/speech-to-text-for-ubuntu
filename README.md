@@ -85,6 +85,18 @@ sudo -E python3 key_listener.py
 
 You can then immediately use **Double-Tap Left Control** to dictate.
 
+> **No fallback.** Nemotron is the only engine. The server **must be running** before you
+> launch the key listener — there is no local Whisper fallback. If it's down, dictation
+> fails loudly (an error sound + notification) and nothing is pasted. Start it with
+> `systemctl --user start nemotron-stt`.
+
+> **Upgrading from an older (Whisper/Parakeet) install?** The Parakeet and Whisper engines
+> and their `stt-switch.sh` / `parakeet-stt.service` were removed. They shared the same
+> socket (`/tmp/stt_server.sock`), so disable any leftover server first to avoid the wrong
+> engine staying bound: `systemctl --user disable --now parakeet-stt` (and stop any manual
+> `stt_server.py`). The OpenAI-compatible HTTP API (`stt_api.py`) is no longer auto-started
+> by the menu — start it manually if `hey_nuc.py` / `summarize` need it (see below).
+
 ## Requirements
 
 - Python 3.x

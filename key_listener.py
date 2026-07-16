@@ -129,6 +129,31 @@ def _env_flag(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
 
 
+def _signal_stt_failure() -> None:
+    """Make a speech-to-text failure user-visible (sound + notification).
+
+    Nemotron is the only engine and has no local fallback, so if speech_to_text.py
+    exits non-zero the user must notice rather than silently getting nothing pasted.
+    Best-effort: never raise.
+    """
+    try:
+        subprocess.Popen(
+            ["paplay", "/usr/share/sounds/freedesktop/stereo/dialog-error.oga"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+    try:
+        subprocess.Popen(
+            ["notify-send", "Speech-to-Text failed",
+             "The Nemotron STT server may be down. Start it with: "
+             "systemctl --user start nemotron-stt"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
 ENABLE_DOUBLE_SUPER = _env_flag("STT_ENABLE_DOUBLE_SUPER", "0")
 
 def _read_environ_vars_from_process(pid: str) -> dict:
@@ -570,8 +595,12 @@ def main():
                 logging.info("Skipping root ydotool fallback (clipboard mode)")
         except subprocess.CalledProcessError as e:
             logging.error(f"Speech-to-text failed with exit code {e.returncode}")
+            # Fail loudly: Nemotron is required and has no fallback, so a failure must be
+            # user-visible (sound + notification), not just a log line.
+            _signal_stt_failure()
         except Exception as e:
             logging.error(f"Could not run speech-to-text: {e}")
+            _signal_stt_failure()
         logging.info("Speech-to-text completed")
 
 

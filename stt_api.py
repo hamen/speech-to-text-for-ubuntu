@@ -87,7 +87,7 @@ async def transcribe(
     if not os.path.exists(SOCKET_PATH):
         return JSONResponse(
             status_code=503,
-            content={"error": {"message": "STT server not running (no socket at /tmp/stt_server.sock)", "type": "server_error"}},
+            content={"error": {"message": f"STT server not running (no socket at {SOCKET_PATH})", "type": "server_error"}},
         )
 
     # Save uploaded audio to temp file
