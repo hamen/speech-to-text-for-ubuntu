@@ -665,7 +665,7 @@ def main():
         logging.info("No text recognized")
         return
 
-        # Clean up the transcribed text to remove speech artifacts (if enabled)
+    # Clean up the transcribed text to remove speech artifacts (if enabled)
     if STT_CLEAN_TEXT:
         cleaned_text = clean_transcribed_text(full_text)
         logging.info("Text cleaning applied")

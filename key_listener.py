@@ -129,29 +129,56 @@ def _env_flag(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).lower() in ("1", "true", "yes", "on")
 
 
-def _signal_stt_failure() -> None:
+def _demote_to_user():
+    """Return a preexec_fn that drops a (root) child to the desktop USER, or None."""
+    try:
+        pw = pwd.getpwnam(USER)
+        uid, gid = pw.pw_uid, pw.pw_gid
+        try:
+            groups = os.getgrouplist(USER, gid)  # type: ignore[attr-defined]
+        except Exception:
+            groups = []
+    except Exception:
+        return None
+
+    def _demote():
+        try:
+            if groups:
+                os.setgroups(groups)
+            os.setgid(gid)
+            os.setuid(uid)
+        except Exception as e:
+            logging.error(f"Failed to setuid/setgid: {e}")
+
+    return _demote
+
+
+def _signal_stt_failure(env=None) -> None:
     """Make a speech-to-text failure user-visible (sound + notification).
 
     Nemotron is the only engine and has no local fallback, so if speech_to_text.py
     exits non-zero the user must notice rather than silently getting nothing pasted.
+    key_listener runs as root, so we demote to the desktop USER and pass the session
+    env (DISPLAY/XDG_RUNTIME_DIR/DBUS) — otherwise paplay/notify-send silently fail.
     Best-effort: never raise.
     """
-    try:
-        subprocess.Popen(
-            ["paplay", "/usr/share/sounds/freedesktop/stereo/dialog-error.oga"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
-    try:
-        subprocess.Popen(
-            ["notify-send", "Speech-to-Text failed",
-             "The Nemotron STT server may be down. Start it with: "
-             "systemctl --user start nemotron-stt"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
+    preexec = _demote_to_user()
+
+    def _spawn(cmd) -> bool:
+        try:
+            subprocess.Popen(cmd, env=env, preexec_fn=preexec,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            return False
+
+    err_sound = "/usr/share/sounds/freedesktop/stereo/dialog-error.oga"
+    # paplay first; pw-play is the PipeWire fallback (both handle .oga) if paplay is absent.
+    if not _spawn(["paplay", err_sound]):
+        _spawn(["pw-play", err_sound])
+    _spawn(["notify-send", "Speech-to-Text failed",
+            "The Nemotron STT server may be down. Start it with: "
+            "systemctl --user start nemotron-stt"])
 
 
 ENABLE_DOUBLE_SUPER = _env_flag("STT_ENABLE_DOUBLE_SUPER", "0")
@@ -438,6 +465,16 @@ def main():
 
     # Setup
     env = setup_environment()
+
+    # Non-fatal preflight: Nemotron is the only engine (no fallback). Warn now if its
+    # socket is absent instead of leaving the user to discover it on the first dictation.
+    stt_socket = os.environ.get("STT_SOCKET", "/tmp/stt_server.sock")
+    if not os.path.exists(stt_socket):
+        logging.warning(
+            f"Nemotron STT socket not found at {stt_socket}. Start the server "
+            "('systemctl --user start nemotron-stt') or dictation will fail — there is no fallback."
+        )
+
     ensure_ydotoold_running(env)
     
     # Detect all keyboard devices
@@ -597,10 +634,10 @@ def main():
             logging.error(f"Speech-to-text failed with exit code {e.returncode}")
             # Fail loudly: Nemotron is required and has no fallback, so a failure must be
             # user-visible (sound + notification), not just a log line.
-            _signal_stt_failure()
+            _signal_stt_failure(env)
         except Exception as e:
             logging.error(f"Could not run speech-to-text: {e}")
-            _signal_stt_failure()
+            _signal_stt_failure(env)
         logging.info("Speech-to-text completed")
 
 
