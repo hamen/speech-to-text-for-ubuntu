@@ -43,7 +43,13 @@ STT_LLM_POLISH_URL = os.environ.get("STT_LLM_POLISH_URL", "http://127.0.0.1:8899
 STT_LLM_POLISH_MODEL = os.environ.get("STT_LLM_POLISH_MODEL", "qwen2.5-1.5b-instruct")
 # Skip polish for very long transcripts so we don't overflow the server context window
 # (which would truncate / garble the output). Falls back to the regex-cleaned text.
-STT_LLM_POLISH_MAX_CHARS = int(os.environ.get("STT_LLM_POLISH_MAX_CHARS", "2000"))
+# Parsed defensively so a bad value can't crash import even when polish is disabled.
+try:
+    STT_LLM_POLISH_MAX_CHARS = int(os.environ.get("STT_LLM_POLISH_MAX_CHARS", "2000"))
+    if STT_LLM_POLISH_MAX_CHARS <= 0:
+        STT_LLM_POLISH_MAX_CHARS = 2000
+except (TypeError, ValueError):
+    STT_LLM_POLISH_MAX_CHARS = 2000
 
 # Sound notification configuration
 STT_USE_SOUND = os.environ.get("STT_USE_SOUND", "1").lower() in ("1", "true", "yes")
@@ -710,6 +716,12 @@ def sanitize_polished(original: str, polished) -> str | None:
     # Runaway / added-paragraph catch: additions are the dangerous direction.
     if len(text) > len(original) * 1.5:
         logging.warning("LLM polish rejected: output too long vs input")
+        return None
+    # Length floor: catch a truncated / heavily-dropped output that the multiset guard
+    # would miss (fewer words always pass it). 0.35 is conservative — legitimate dedup and
+    # email/number collapse rarely shrink below this, and a false reject just falls back.
+    if len(text) < len(original) * 0.35:
+        logging.warning("LLM polish rejected: output too short vs input (truncation/drop?)")
         return None
     # "No new words" as multiset containment (accent/case folded).
     orig_counts = Counter(_polish_words(original))

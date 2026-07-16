@@ -244,9 +244,10 @@ These are read by `nemotron_stt_server.py` (set them in the systemd unit):
 
 A second, **opt-in** cleanup pass that sends the regex-cleaned transcript to a local
 `llama-server` (Qwen2.5-1.5B) for semantic dedup, punctuation, and number/version/amount/
-email normalization. Enable it by setting `STT_LLM_POLISH=1` in
-`~/.config/speech-to-text/config.conf`, then `systemctl --user restart stt-key-listener`.
-Run the server via the example unit `systemd/stt-cleanup-llm.service`.
+email normalization. Enable it by setting `STT_LLM_POLISH=1` in `~/.config/speech-to-text/config.conf`, then
+restart the key listener (e.g. `systemctl --user restart stt-key-listener` if you run it
+as a service, otherwise relaunch it). Run the server via the example unit
+`systemd/stt-cleanup-llm.service`.
 
 - `STT_LLM_POLISH` (default: `0`) - Enable the LLM polish pass.
 - `STT_LLM_POLISH_URL` (default: `http://127.0.0.1:8899/v1/chat/completions`) - OpenAI-compatible endpoint.
@@ -261,8 +262,12 @@ Run the server via the example unit `systemd/stt-cleanup-llm.service`.
 - **The fidelity guard rejects added/duplicated words**, but it **cannot catch a *changed
   number*** (e.g. a mis-heard `venti`→`150`), because the number conversions intentionally
   introduce digits. Do not enable polish for number-critical dictation without spot-checking.
-- The guard also cannot detect the model **dropping** a meaningful word; it relies on the
-  prompt for that.
+- The guard also cannot detect the model **dropping** a meaningful word or **reordering**
+  words (only added/duplicated words and gross length changes are caught); it relies on the
+  prompt for those.
+- **Latency:** the pass adds a synchronous HTTP call on the dictation path (default timeout
+  2 s). With the warm `stt-cleanup-llm.service` up it's ~80–150 ms; if the server is down,
+  a refused connection returns fast and falls back to the regex text.
 - **Privacy:** keep `STT_LLM_POLISH_URL` on `localhost`. Pointing it at a remote endpoint
   POSTs your full dictation text over the network with no authentication.
 

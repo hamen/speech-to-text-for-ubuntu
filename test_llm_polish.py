@@ -91,6 +91,11 @@ class TestSanitizePolished(unittest.TestCase):
     def test_rejects_runaway_length(self):
         self.assertIsNone(stt.sanitize_polished("ok", "ok " * 50))
 
+    def test_rejects_too_short(self):
+        # Gross tail-drop / truncation the multiset guard would miss (fewer words pass it).
+        self.assertIsNone(stt.sanitize_polished(
+            "voglio andare a casa domani mattina presto", "voglio"))
+
     def test_rejects_refusal_boilerplate(self):
         # Length-neutral so this exercises the word-multiset guard, not the length cap:
         # the refusal's words ("non", "riesco", "farlo") aren't in the source.
@@ -158,6 +163,11 @@ class TestDefaults(unittest.TestCase):
         # With STT_LLM_POLISH unset at import time, the feature is off — the main() path
         # is gated by `if STT_LLM_POLISH:` so no network call happens by default.
         self.assertFalse(stt.STT_LLM_POLISH)
+
+    def test_max_chars_parsed_defensively(self):
+        # Parsed with a fallback so a bad env value can't crash import (even polish-off).
+        self.assertIsInstance(stt.STT_LLM_POLISH_MAX_CHARS, int)
+        self.assertGreater(stt.STT_LLM_POLISH_MAX_CHARS, 0)
 
 
 if __name__ == "__main__":
