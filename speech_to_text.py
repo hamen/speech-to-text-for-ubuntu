@@ -713,15 +713,13 @@ def sanitize_polished(original: str, polished) -> str | None:
     text = re.sub(r"^\s*(?:out|output|trascrizione)\s*:\s*", "", text, flags=re.IGNORECASE).strip()
     if not text:
         return None
-    # Runaway / added-paragraph catch: additions are the dangerous direction.
+    # Runaway / added-paragraph catch: additions are the dangerous direction. We do NOT
+    # add a lower length floor: aggressive dedup and number-only conversions (e.g.
+    # "quattro punto otto" -> "4.8") legitimately shrink the text a lot, so a floor would
+    # false-reject the core feature. Truncation is instead guarded upstream by
+    # STT_LLM_POLISH_MAX_CHARS (input cap) and the finish_reason=="length" check.
     if len(text) > len(original) * 1.5:
         logging.warning("LLM polish rejected: output too long vs input")
-        return None
-    # Length floor: catch a truncated / heavily-dropped output that the multiset guard
-    # would miss (fewer words always pass it). 0.35 is conservative — legitimate dedup and
-    # email/number collapse rarely shrink below this, and a false reject just falls back.
-    if len(text) < len(original) * 0.35:
-        logging.warning("LLM polish rejected: output too short vs input (truncation/drop?)")
         return None
     # "No new words" as multiset containment (accent/case folded).
     orig_counts = Counter(_polish_words(original))

@@ -91,10 +91,11 @@ class TestSanitizePolished(unittest.TestCase):
     def test_rejects_runaway_length(self):
         self.assertIsNone(stt.sanitize_polished("ok", "ok " * 50))
 
-    def test_rejects_too_short(self):
-        # Gross tail-drop / truncation the multiset guard would miss (fewer words pass it).
-        self.assertIsNone(stt.sanitize_polished(
-            "voglio andare a casa domani mattina presto", "voglio"))
+    def test_accepts_aggressive_dedup(self):
+        # Heavy dedup / number-only conversion shrinks a lot — must NOT be rejected
+        # (there is deliberately no lower length floor).
+        self.assertEqual(stt.sanitize_polished("ciao ciao ciao ciao ciao", "Ciao."), "Ciao.")
+        self.assertEqual(stt.sanitize_polished("quattro punto otto", "4.8"), "4.8")
 
     def test_rejects_refusal_boilerplate(self):
         # Length-neutral so this exercises the word-multiset guard, not the length cap:
