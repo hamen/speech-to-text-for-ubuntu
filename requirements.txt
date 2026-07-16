@@ -4,16 +4,6 @@ numpy
 soundfile
 pyautogui
 evdev
-faster-whisper
 
-# GPU acceleration (CUDA 12.1 compatible)
-# Note: PyTorch will be installed separately via run.sh for optimal CUDA support
-# torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Optional: Additional audio processing libraries for better quality
-librosa
-scipy
-
-# Model testing and monitoring
-psutil
-GPUtil
+# Note: the Nemotron STT server has its own venv (see requirements-nemotron.txt).
+# This file lists only what the client (key_listener.py / speech_to_text.py) needs.

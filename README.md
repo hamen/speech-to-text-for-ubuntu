@@ -1,44 +1,33 @@
 # Speech-to-Text For Ubuntu
 
-A powerful Python project that provides **push-to-talk speech recognition** using native keyboard shortcuts and automatically transcribes it to text using Faster Whisper models with **GPU acceleration** and **intelligent text cleaning**.
+A powerful Python project that provides **push-to-talk speech recognition** using native keyboard shortcuts and automatically transcribes it to text using the **NVIDIA Nemotron 3.5 ASR** model with **GPU acceleration** and **intelligent text cleaning**.
 
-## ✨ What's New (June 2026)
-
-**LLM post-processing pass** (`parakeet_stt_server.py`)
-
-The Parakeet server now runs a lightweight local LLM (Qwen2.5-0.5B-Instruct, ~470MB, fully on GPU) over every transcription before it reaches the clipboard. It fixes obvious speech-to-text errors and adds missing question marks — without rephrasing or rewriting.
-
-- **~150–250ms** added latency on an RTX 4070 (negligible for push-to-talk)
-- Italian and English supported out of the box
-- Safety guard: if the LLM changes more than 20% of the words, the original is kept
-- Controlled by `STT_LLM_POSTPROCESS=0/1` (default: on) and `STT_LLM_MODEL` env vars
-
-**300ms silence padding** on every recording before it's passed to Parakeet — prevents the last word from being clipped when the push-to-talk key is released while still speaking.
+The transcription engine is **[nvidia/nemotron-3.5-asr-streaming-0.6b](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)** (FastConformer cache-aware RNNT, multilingual with automatic language detection). It runs in bf16 using only ~1.4 GB VRAM and requires `transformers >= 5.13.0` (native `Nemotron3_5Asr` class). The model is served by a persistent Unix-socket server; there is no local fallback.
 
 **🎯 Key Features:**
 - **Push-to-talk recording** - Press and hold to record, release to process
 - **Native Keyboard Shortcuts** - **Double-Control** by default; optional **Double-Super** toggle in config
-- **⚡ Persistent Model Server** - Model stays in memory for **instant transcription** (~0.4s instead of ~2.6s)
-- **🌍 Multilingual Support** - 99 languages with automatic detection (Italian, English, Spanish, etc.)
+- **⚡ Persistent Model Server** - The Nemotron model stays in memory for **instant transcription**
+- **300ms silence padding** - Prevents the last word from being clipped when the push-to-talk key is released while still speaking
+- **Multilingual with automatic language detection** - Handles mixed Italian/English dictation without dropping English words
 - **Multiple output modes** - Choose between automatic typing or clipboard + notification
-- **Beautiful interactive menu** - Easy setup and configuration with [Gum](https://github.com/charmbracelet/gum)
-- **Offline transcription** - Works without internet using local Whisper models
+- **Interactive menu** - Optional setup and configuration helper with [Gum](https://github.com/charmbracelet/gum)
+- **Offline transcription** - Works without internet using the local Nemotron model
 - **GPU acceleration** - Optimized for NVIDIA RTX 4070 and other CUDA GPUs
 - **Intelligent text cleaning** - Removes speech artifacts while preserving meaningful content
 - **Wayland & X11 support** - Compatible with modern Linux desktop environments
-- **🌐 OpenAI-Compatible HTTP API** - Expose local Whisper via `POST /v1/audio/transcriptions` for use with [summarize](https://github.com/steipete/summarize) and other tools
-- **Configurable models** - From fast `tiny.en` to fast, accurate `large-v3-turbo`
+- **🌐 OpenAI-Compatible HTTP API** - Expose the local STT server via `POST /v1/audio/transcriptions` for use with [summarize](https://github.com/steipete/summarize) and other tools
 
-Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with optional GPU acceleration.
+Designed for use on Linux systems (tested on Ubuntu 24.04.2 LTS) with GPU acceleration.
 
 ## Project Overview
 
-- **key_listener.py**: Monitors keyboard devices for dictation shortcuts. Now supports listening on **all connected keyboards** simultaneously, making it robust against remapping tools and different hardware.
-- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and transcribes the speech to text using the Faster Whisper model. Automatically uses the persistent server when available for instant transcription.
-- **stt_server.py**: **Persistent model server** that keeps the Whisper model loaded in memory. Eliminates the ~2 second model loading time for each transcription request.
-- **stt_api.py**: **OpenAI-compatible HTTP API** that wraps the Unix socket server. Exposes `POST /v1/audio/transcriptions` on port 8787, making the local GPU-accelerated Whisper available to any tool that speaks the OpenAI Whisper API (e.g. `summarize`, custom scripts).
-- **menu.sh**: Interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for setup, mode selection, and system management. Automatically starts the persistent server and the HTTP API.
-- **large-v3-config.sh**: Optimized configuration for RTX 4070 using `large-v3-turbo` by default with automatic cuDNN detection.
+- **key_listener.py**: Monitors keyboard devices for dictation shortcuts. Supports listening on **all connected keyboards** simultaneously, making it robust against remapping tools and different hardware.
+- **speech_to_text.py**: Loads the recorded audio, processes it (converts stereo to mono if needed), and sends it to the Nemotron STT server over the Unix socket `/tmp/stt_server.sock` for transcription.
+- **nemotron_stt_server.py**: **Persistent model server** that keeps the Nemotron 3.5 ASR model loaded in memory. Runs as the systemd user service `nemotron-stt` and serves transcription requests over the Unix socket.
+- **stt_api.py**: **OpenAI-compatible HTTP API** that wraps the Unix socket server. Exposes `POST /v1/audio/transcriptions` on port 8787, making the local GPU-accelerated STT server available to any tool that speaks the OpenAI Whisper API (e.g. `summarize`, custom scripts).
+- **menu.sh**: Optional interactive menu powered by [Gum](https://github.com/charmbracelet/gum) for launching the key listener and basic management. The Nemotron server itself is normally managed by systemd.
+- **nemotron-stt.service.template**: systemd user service template for the Nemotron STT server (fill in the venv and repo paths).
 
 ## 🎤 Keyboard Shortcuts
 
@@ -75,19 +64,38 @@ chmod +x menu.sh
 The menu will guide you through:
 1. **Installing Dependencies** - Automatically installs all required packages
 2. **Choosing Output Mode** - Select between auto-typing or clipboard + notification
-3. **🚀 Run Large-v3 GPU (Recommended)** - Best quality with GPU acceleration and text cleaning
+3. **🎙️ Run Nemotron STT** - Launch the key listener against the running Nemotron server
 4. **Running the System** - Start in foreground or background
 5. **System Status** - Check what's running and troubleshoot issues
 
-### Option 2: Direct launch (power users)
+### Option 2: systemd + direct launch (recommended)
 
-If you prefer to skip the menu, export your desired `STT_` settings (see Advanced configuration) and run:
+The Nemotron STT server is meant to run as a systemd user service. Fill in the
+paths in `nemotron-stt.service.template`, install it, then start it:
+
+```bash
+systemctl --user start nemotron-stt
+```
+
+With the server running (socket at `/tmp/stt_server.sock`), start the key listener:
 
 ```bash
 sudo -E python3 key_listener.py
 ```
 
 You can then immediately use **Double-Tap Left Control** to dictate.
+
+> **No fallback.** Nemotron is the only engine. The server **must be running** before you
+> launch the key listener — there is no local Whisper fallback. If it's down, dictation
+> fails loudly (an error sound + notification) and nothing is pasted. Start it with
+> `systemctl --user start nemotron-stt`.
+
+> **Upgrading from an older (Whisper/Parakeet) install?** The Parakeet and Whisper engines
+> and their `stt-switch.sh` / `parakeet-stt.service` were removed. They shared the same
+> socket (`/tmp/stt_server.sock`), so disable any leftover server first to avoid the wrong
+> engine staying bound: `systemctl --user disable --now parakeet-stt` (and stop any manual
+> `stt_server.py`). The OpenAI-compatible HTTP API (`stt_api.py`) is no longer auto-started
+> by the menu — start it manually if `hey_nuc.py` / `summarize` need it (see below).
 
 ## Requirements
 
@@ -96,7 +104,7 @@ You can then immediately use **Double-Tap Left Control** to dictate.
 - Python virtual environment with required packages installed
 - `arecord` or `pw-record` (for audio recording)
 - `evdev` (for key listening)
-- Faster Whisper (speech-to-text model)
+- `transformers` (>= 5.13) for the Nemotron 3.5 ASR model
 
 ### For GPU Acceleration (Recommended)
 - NVIDIA GPU with CUDA support
@@ -132,26 +140,31 @@ sudo -E python3 key_listener.py
 The system uses a **persistent model server** architecture for instant transcription:
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  key_listener   │────▶│ speech_to_text   │────▶│   stt_server    │
-│  (detects keys) │     │ (processes audio)│     │ (model in RAM)  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────────┐
+│  key_listener   │────▶│ speech_to_text   │────▶│  nemotron_stt_server │
+│  (detects keys) │     │ (processes audio)│     │    (model in RAM)    │
+└─────────────────┘     └──────────────────┘     └──────────────────────┘
 ```
 
-- **Without server**: Each transcription takes ~2.6s (model loads every time)
-- **With server**: Each transcription takes ~0.4s (model stays in memory)
+The Nemotron model is loaded once and stays in memory, so transcription is
+near-instant after the first request. `speech_to_text.py` talks to the server
+over the Unix socket `/tmp/stt_server.sock` (there is no local fallback).
 
-The menu automatically starts the server when you select "🚀 Run Large-v3 GPU (Recommended)".
+The server runs as the systemd user service `nemotron-stt`:
+
+```bash
+systemctl --user start nemotron-stt
+```
 
 ### 🌐 OpenAI-Compatible HTTP API
 
-The system includes an HTTP API (`stt_api.py`) that exposes the local Whisper model as an OpenAI-compatible endpoint. This lets external tools use your GPU for transcription.
+The system includes an HTTP API (`stt_api.py`) that exposes the local STT server as an OpenAI-compatible endpoint. This lets external tools use your GPU for transcription.
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  HTTP client │────▶│   stt_api    │────▶│   stt_server    │
-│  (port 8787) │     │  (FastAPI)   │     │ (model in RAM)  │
-└──────────────┘     └──────────────┘     └─────────────────┘
+┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐
+│  HTTP client │────▶│   stt_api    │────▶│  nemotron_stt_server │
+│  (port 8787) │     │  (FastAPI)   │     │    (model in RAM)    │
+└──────────────┘     └──────────────┘     └──────────────────────┘
 ```
 
 **Endpoint:** `POST http://localhost:8787/v1/audio/transcriptions`
@@ -169,13 +182,13 @@ python3 stt_api.py
 
 # Transcribe a file
 curl -X POST http://localhost:8787/v1/audio/transcriptions \
-  -F file=@audio.wav -F model=whisper-large-v3
+  -F file=@audio.wav -F model=nemotron-3.5
 
 # Health check
 curl http://localhost:8787/health
 ```
 
-The API starts automatically when you launch "Large-v3 GPU" from the menu. You can also set `OPENAI_WHISPER_BASE_URL` in your shell profile for permanent access.
+Start it with `python3 stt_api.py` (it proxies to the running Nemotron server). You can also set `OPENAI_WHISPER_BASE_URL` in your shell profile for permanent access.
 
 ### Output Modes
 
@@ -211,12 +224,12 @@ The system includes intelligent text cleaning that transforms raw speech transcr
 
 You can tweak accuracy/latency and platform settings without changing code. Set these env vars when launching `menu.sh` (it will export from your config) or when running `sudo -E python3 key_listener.py`.
 
-### Model Configuration
-- `STT_MODEL` (default: `large-v3-turbo`) — examples: `tiny.en`, `base.en`, `small.en`, `medium.en`, `large-v3-turbo`, `large-v3`.
-- `STT_DEVICE` (default: `cuda`) — `cuda`, `rocm`, `auto`, or `cpu`.
-- `STT_COMPUTE_TYPE` — defaults to `int8_float16` on GPU, `int8` on CPU. Options: `int8`, `int8_float16`, `float16`, `float32`.
-- `STT_BEAM_SIZE` (default: `5`) — increase (e.g., `5`) for better accuracy, slightly slower.
-- `STT_LANGUAGE` (default: `auto`) — language code or `auto` for automatic detection. Examples: `en`, `it`, `es`, `de`, `fr`.
+### Nemotron Server Configuration
+These are read by `nemotron_stt_server.py` (set them in the systemd unit):
+- `STT_SOCKET` (default: `/tmp/stt_server.sock`) — Unix socket path shared with the client.
+- `STT_LANG` (default: `auto`) — language, or a locale such as `it-IT` to force one.
+- `STT_DTYPE` (default: `bfloat16`) — inference dtype; use `float32` as a fallback.
+- `STT_PAD_MS` (default: `300`) — silence padding to avoid clipping the last word.
 
 ### Text Cleaning Configuration
 - `STT_CLEAN_TEXT` (default: `1`) - Enable/disable text cleaning
@@ -237,11 +250,9 @@ You can tweak accuracy/latency and platform settings without changing code. Set 
 - **✅ Clipboard Fixed**: X11/Xfce4 clipboard functionality now works correctly with automatic session detection
 - **Tools Used**: `xclip` (primary) and `xsel` (fallback) for X11 clipboard operations
 
-## 🚀 Nemotron 3.5 ASR (streaming, multilingual) — Linux experiment
+## 🚀 Nemotron STT Server
 
-An alternative STT backend to Whisper/Parakeet, based on **[nvidia/nemotron-3.5-asr-streaming-0.6b](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)** (FastConformer cache-aware RNNT, 40 languages, real streaming). It's a **drop-in** for the persistent server: same Unix-socket protocol as `parakeet_stt_server.py`, so `key_listener.py` / `speech_to_text.py` need **no changes**.
-
-Why it can be a nice upgrade: true cache-aware streaming, automatic language detection (handles mixed Italian/English dictation without dropping English words), and it runs in **bf16 using only ~1.4 GB VRAM** (loads in ~1s once cached).
+The transcription engine is **[nvidia/nemotron-3.5-asr-streaming-0.6b](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)** (FastConformer cache-aware RNNT, multilingual with automatic language detection). It runs in **bf16 using only ~1.4 GB VRAM** and loads in ~1s once cached.
 
 **Requires `transformers >= 5.13.0`** (native `Nemotron3_5Asr` class). The stable NeMo PyPI release does **not** ship the required model class, so use the Transformers path.
 
@@ -256,7 +267,7 @@ python3.12 -m venv venv-nemotron
 ### Run
 
 ```bash
-# Persistent socket server (drop-in for parakeet_stt_server.py)
+# Persistent socket server (serves /tmp/stt_server.sock)
 STT_LANG=auto STT_DTYPE=bfloat16 ./venv-nemotron/bin/python nemotron_stt_server.py
 
 # One-off streaming from the mic (prints partial hypotheses live, Ctrl-C to stop)
@@ -268,18 +279,17 @@ STT_LANG=auto STT_DTYPE=bfloat16 ./venv-nemotron/bin/python nemotron_stt_server.
 
 Env vars: `STT_SOCKET` (default `/tmp/stt_server.sock`), `STT_LANG` (default `auto` — recommended; use a locale like `it-IT` to force a language), `STT_DTYPE` (default `bfloat16`), `STT_PAD_MS` (default `300`).
 
-### systemd (user) + switch between engines
+### systemd (user)
 
-Install both user units (they bind the same socket, so only one runs at a time):
+Install the user unit so the server starts on login and stays running:
 - Copy `nemotron-stt.service.template` → `~/.config/systemd/user/nemotron-stt.service`, replacing `__NEMO_HOME__` and `__VENV__`.
-- Copy `parakeet-stt.service.template` → `~/.config/systemd/user/parakeet-stt.service`, replacing `__REPO__` and `__VENV__` (needed for `stt-switch.sh parakeet`).
 
-Then `systemctl --user daemon-reload` and switch the active dictation engine:
+Then reload and start it:
 
 ```bash
-./stt-switch.sh nemotron   # switch dictation to Nemotron
-./stt-switch.sh parakeet   # switch back to Parakeet
-./stt-switch.sh status
+systemctl --user daemon-reload
+systemctl --user enable --now nemotron-stt
+systemctl --user status nemotron-stt
 ```
 
 ## License

@@ -16,10 +16,6 @@ DEFAULT_CONFIG=(
     "STT_AGGRESSIVE_CLEANING=0"
     "STT_PRESERVE_COMMON_WORDS=1"
     "STT_MODE=clipboard"
-    "STT_MODEL=large-v3-turbo"
-    "STT_DEVICE=cuda"
-    "STT_COMPUTE_TYPE=int8_float16"
-    "STT_BEAM_SIZE=5"
     "STT_ENABLE_DOUBLE_SUPER=0"
 )
 
@@ -122,14 +118,14 @@ config_menu() {
         echo "====================="
         echo "1️⃣  Sound vs Notification Settings"
         echo "2️⃣  Text Cleaning Settings"
-        echo "3️⃣  Model & Performance Settings"
+        echo "3️⃣  Output Mode"
         echo "4️⃣  Hotkey Settings"
         echo "5️⃣  Show Current Configuration"
         echo "6️⃣  Reset to Defaults"
         echo "7️⃣  Back to Main Menu"
         echo ""
 
-        local choice=$(gum choose "1️⃣ Sound/Notification" "2️⃣ Text Cleaning" "3️⃣ Model Settings" "4️⃣ Hotkey Settings" "5️⃣ Show Config" "6️⃣ Reset Defaults" "7️⃣ Back")
+        local choice=$(gum choose "1️⃣ Sound/Notification" "2️⃣ Text Cleaning" "3️⃣ Output Mode" "4️⃣ Hotkey Settings" "5️⃣ Show Config" "6️⃣ Reset Defaults" "7️⃣ Back")
 
         case "$choice" in
             "1️⃣ Sound/Notification")
@@ -138,8 +134,8 @@ config_menu() {
             "2️⃣ Text Cleaning")
                 text_cleaning_menu
                 ;;
-            "3️⃣ Model Settings")
-                model_settings_menu
+            "3️⃣ Output Mode")
+                output_mode_menu
                 ;;
             "4️⃣ Hotkey Settings")
                 hotkey_settings_menu
@@ -358,98 +354,6 @@ customize_text_cleaning() {
                 ;;
         esac
     done
-}
-
-# Model and performance settings menu
-model_settings_menu() {
-    while true; do
-        echo ""
-        echo "🚀 Model & Performance Settings"
-        echo "==============================="
-        echo "Current: Model=${STT_MODEL:-large-v3-turbo}, Device=${STT_DEVICE:-cuda}, Beam=${STT_BEAM_SIZE:-5}"
-        echo ""
-        echo "1️⃣  Model Selection"
-        echo "2️⃣  Device Selection"
-        echo "3️⃣  Beam Size Adjustment"
-        echo "4️⃣  Output Mode"
-        echo "5️⃣  Back"
-        echo ""
-
-        local choice=$(gum choose "1️⃣ Model" "2️⃣ Device" "3️⃣ Beam Size" "4️⃣ Output Mode" "5️⃣ Back")
-
-        case "$choice" in
-            "1️⃣ Model")
-                model_selection_menu
-                ;;
-            "2️⃣ Device")
-                device_selection_menu
-                ;;
-            "3️⃣ Beam Size")
-                beam_size_menu
-                ;;
-            "4️⃣ Output Mode")
-                output_mode_menu
-                ;;
-            "5️⃣ Back")
-                break
-                ;;
-        esac
-    done
-}
-
-# Model selection menu
-model_selection_menu() {
-    echo ""
-    echo "📊 Model Selection"
-    echo "=================="
-    echo "Current: ${STT_MODEL:-large-v3-turbo}"
-    echo ""
-
-    local models=("tiny.en" "base.en" "small.en" "medium.en" "large-v3-turbo" "large-v3" "large-v2" "large")
-    local choice=$(gum choose "${models[@]}" "Back")
-
-    if [[ "$choice" != "Back" ]]; then
-        save_config "STT_MODEL" "$choice"
-        export STT_MODEL="$choice"
-        show_success "Model set to: $choice"
-    fi
-}
-
-# Device selection menu
-device_selection_menu() {
-    echo ""
-    echo "💻 Device Selection"
-    echo "==================="
-    echo "Current: ${STT_DEVICE:-cuda}"
-    echo ""
-
-    local devices=("cuda" "cpu" "auto")
-    local choice=$(gum choose "${devices[@]}" "Back")
-
-    if [[ "$choice" != "Back" ]]; then
-        save_config "STT_DEVICE" "$choice"
-        export STT_DEVICE="$choice"
-        show_success "Device set to: $choice"
-    fi
-}
-
-# Beam size adjustment menu
-beam_size_menu() {
-    echo ""
-    echo "🎯 Beam Size Adjustment"
-    echo "======================="
-    echo "Current: ${STT_BEAM_SIZE:-5}"
-    echo "Higher = Better accuracy, slower processing"
-    echo ""
-
-    local beam_sizes=("1" "3" "5" "7" "10")
-    local choice=$(gum choose "${beam_sizes[@]}" "Back")
-
-    if [[ "$choice" != "Back" ]]; then
-        save_config "STT_BEAM_SIZE" "$choice"
-        export STT_BEAM_SIZE="$choice"
-        show_success "Beam size set to: $choice"
-    fi
 }
 
 # Output mode menu
