@@ -41,6 +41,9 @@ STT_PRESERVE_COMMON_WORDS = os.environ.get("STT_PRESERVE_COMMON_WORDS", "1").low
 STT_LLM_POLISH = os.environ.get("STT_LLM_POLISH", "0").lower() in ("1", "true", "yes")
 STT_LLM_POLISH_URL = os.environ.get("STT_LLM_POLISH_URL", "http://127.0.0.1:8899/v1/chat/completions")
 STT_LLM_POLISH_MODEL = os.environ.get("STT_LLM_POLISH_MODEL", "qwen2.5-1.5b-instruct")
+# Skip polish for very long transcripts so we don't overflow the server context window
+# (which would truncate / garble the output). Falls back to the regex-cleaned text.
+STT_LLM_POLISH_MAX_CHARS = int(os.environ.get("STT_LLM_POLISH_MAX_CHARS", "2000"))
 
 # Sound notification configuration
 STT_USE_SOUND = os.environ.get("STT_USE_SOUND", "1").lower() in ("1", "true", "yes")
@@ -727,12 +730,23 @@ def polish_with_llm(text: str) -> str | None:
     import json
     import urllib.request
     import urllib.error
+    # Skip very long transcripts: they can overflow the server context window and come
+    # back truncated/garbled. Falling back to the regex text is safer than a bad polish.
+    if len(text) > STT_LLM_POLISH_MAX_CHARS:
+        logging.info(f"LLM polish skipped: input too long ({len(text)} > {STT_LLM_POLISH_MAX_CHARS} chars)")
+        return None
     try:
         timeout = float(os.environ.get("STT_LLM_POLISH_TIMEOUT", "2.0"))
         if timeout <= 0:
             timeout = 2.0
     except (TypeError, ValueError):
         timeout = 2.0
+    try:
+        max_tokens = int(os.environ.get("STT_LLM_POLISH_MAX_TOKENS", "512"))
+        if max_tokens <= 0:
+            max_tokens = 512
+    except (TypeError, ValueError):
+        max_tokens = 512
     payload = json.dumps({
         "model": STT_LLM_POLISH_MODEL,
         "messages": [
@@ -740,7 +754,7 @@ def polish_with_llm(text: str) -> str | None:
             {"role": "user", "content": text},
         ],
         "temperature": 0,
-        "max_tokens": 256,
+        "max_tokens": max_tokens,
     }).encode("utf-8")
     req = urllib.request.Request(
         STT_LLM_POLISH_URL,
@@ -755,6 +769,11 @@ def polish_with_llm(text: str) -> str | None:
         choices = data.get("choices") or []
         if not choices:
             logging.warning("LLM polish: no choices in response")
+            return None
+        # A truncated response ("length") can be shorter than the input and would sneak
+        # past the fidelity guard (fewer words), silently dropping the tail. Reject it.
+        if choices[0].get("finish_reason") == "length":
+            logging.warning("LLM polish: response truncated (finish_reason=length) — discarding")
             return None
         content = choices[0].get("message", {}).get("content")
         if not isinstance(content, str) or not content.strip():

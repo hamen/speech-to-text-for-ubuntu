@@ -1,8 +1,8 @@
 """Hermetic tests for the optional LLM transcript-polish feature.
 
-These tests never touch a GPU, a network, or the ML dependencies: the heavy imports in
-speech_to_text.py (numpy / soundfile / faster_whisper) are stubbed in sys.modules before
-import, and urllib is mocked. Run with:  python3 -m unittest test_llm_polish
+These tests never touch a GPU, a network, or the audio dependencies: the heavy imports in
+speech_to_text.py (numpy / soundfile) are stubbed in sys.modules before import, and urllib
+is mocked. Run with:  python3 -m unittest test_llm_polish
 """
 import sys
 import types
@@ -92,8 +92,10 @@ class TestSanitizePolished(unittest.TestCase):
         self.assertIsNone(stt.sanitize_polished("ok", "ok " * 50))
 
     def test_rejects_refusal_boilerplate(self):
+        # Length-neutral so this exercises the word-multiset guard, not the length cap:
+        # the refusal's words ("non", "riesco", "farlo") aren't in the source.
         self.assertIsNone(stt.sanitize_polished(
-            "ciao come stai", "Ecco la trascrizione ripulita: ciao come stai"))
+            "trascrivi questo testo per favore", "non riesco a farlo"))
 
 
 class TestPolishWithLlm(unittest.TestCase):
@@ -136,6 +138,19 @@ class TestPolishWithLlm(unittest.TestCase):
                             return_value=_make_response(_chat_body("Ok."))) as m:
                 self.assertEqual(stt.polish_with_llm("ok"), "Ok.")
                 self.assertEqual(m.call_args.kwargs["timeout"], 2.0)
+
+    def test_truncated_response_returns_none(self):
+        import json
+        body = json.dumps({"choices": [{"finish_reason": "length",
+                                        "message": {"content": "troncato a meta"}}]}).encode("utf-8")
+        with mock.patch("urllib.request.urlopen", return_value=_make_response(body)):
+            self.assertIsNone(stt.polish_with_llm("un testo qualsiasi"))
+
+    def test_input_too_long_skips_without_network(self):
+        long_text = "a " * (stt.STT_LLM_POLISH_MAX_CHARS + 10)
+        with mock.patch("urllib.request.urlopen") as m:
+            self.assertIsNone(stt.polish_with_llm(long_text))
+            m.assert_not_called()
 
 
 class TestDefaults(unittest.TestCase):
