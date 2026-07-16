@@ -30,7 +30,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s: %(message)s",
 )
 
-SOCKET_PATH = "/tmp/stt_server.sock"
+SOCKET_PATH = os.environ.get("STT_SOCKET", "/tmp/stt_server.sock")
 PORT = int(os.environ.get("STT_API_PORT", "8787"))
 
 app = FastAPI(title="Local Nemotron STT API", description="OpenAI-compatible wrapper for the Nemotron STT server on GPU")

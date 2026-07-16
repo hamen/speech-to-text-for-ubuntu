@@ -86,9 +86,15 @@ install_dependencies() {
         echo "✅ Virtual environment created"
     fi
 
-    echo "📚 Installing Python packages..."
+    echo "📚 Installing Python packages (client)..."
     "$REPO_DIR/venv/bin/pip" install -r "$REPO_DIR/requirements.txt"
-    echo "✅ Python dependencies installed"
+    echo "✅ Client dependencies installed"
+
+    echo
+    echo "ℹ️  Transcription requires the Nemotron STT server, which runs in its OWN venv"
+    echo "   (transformers>=5.13, torch) — see requirements-nemotron.txt and the README."
+    echo "   Set it up and enable it as a systemd user service (nemotron-stt) before dictating;"
+    echo "   there is no local fallback engine."
 
     echo "🔧 Checking for ydotool..."
     if command -v ydotool >/dev/null 2>&1; then
@@ -128,10 +134,28 @@ start_ydotoold() {
     fi
 }
 
+# Ensure the Nemotron STT server is actually running (systemd service or process),
+# not merely that some server owns the socket — the socket path used to be shared with
+# the now-removed Parakeet server. Returns 0 if ready, 1 otherwise. There is no fallback.
+ensure_nemotron_ready() {
+    local sock="${STT_SOCKET:-/tmp/stt_server.sock}"
+    if systemctl --user is-active --quiet nemotron-stt 2>/dev/null || pgrep -f "nemotron_stt_server.py" >/dev/null 2>&1; then
+        if [[ -S "$sock" ]]; then
+            return 0
+        fi
+        echo "⏳ Nemotron service is up but its socket ($sock) isn't ready yet — give it a moment."
+        return 1
+    fi
+    echo "❌ Nemotron STT server is not running (there is no local fallback)."
+    echo "   Start it with:  systemctl --user start nemotron-stt"
+    return 1
+}
+
 run_with_typing() {
     show_subtitle "Running with Auto-Typing"
     show_info "This mode will automatically type transcribed text into the focused window."
     load_persistent_config
+    ensure_nemotron_ready || { gum confirm "Return to main menu?" && return 0 || return 1; }
 
     if gum confirm "Start speech-to-text with auto-typing?"; then
         start_ydotoold
@@ -150,6 +174,7 @@ run_with_clipboard() {
     show_subtitle "Running with Manual Pasting"
     show_info "This mode will copy transcribed text to clipboard and notify you to paste manually."
     load_persistent_config
+    ensure_nemotron_ready || { gum confirm "Return to main menu?" && return 0 || return 1; }
 
     if gum confirm "Start speech-to-text with clipboard mode?"; then
         start_ydotoold
@@ -170,16 +195,9 @@ run_nemotron() {
     show_info "Transcription is served by the Nemotron STT server over the Unix socket /tmp/stt_server.sock. The server runs as the systemd user service 'nemotron-stt'."
     load_persistent_config
 
-    # The Nemotron server must already be running (managed by systemd).
-    if [[ ! -S /tmp/stt_server.sock ]]; then
-        echo "❌ Nemotron STT server socket not found: /tmp/stt_server.sock"
-        echo "   Start the server first:"
-        echo "     systemctl --user start nemotron-stt"
-        echo
-        gum confirm "Return to main menu?" && return 0 || exit 0
-        return 1
-    fi
-    echo "✅ Nemotron STT server socket found: /tmp/stt_server.sock"
+    # The Nemotron server must already be running (managed by systemd). No fallback.
+    ensure_nemotron_ready || { gum confirm "Return to main menu?" && return 0 || return 1; }
+    echo "✅ Nemotron STT server is running."
     echo
 
     if gum confirm "Launch key listener (Nemotron)?"; then
@@ -198,6 +216,7 @@ run_nemotron() {
 run_background() {
     show_subtitle "Running in Background"
     load_persistent_config
+    ensure_nemotron_ready || { gum confirm "Return to main menu?" && return 0 || return 1; }
 
     local mode_choice=$(gum choose \
         "Auto-typing mode" \
@@ -282,11 +301,16 @@ check_status() {
     done
 
     echo
-    # Check Nemotron STT server socket
-    if [[ -S /tmp/stt_server.sock ]]; then
-        echo "✅ Nemotron STT server socket exists: /tmp/stt_server.sock"
+    # Check the Nemotron STT server is actually running (service/process, not just socket)
+    local sock="${STT_SOCKET:-/tmp/stt_server.sock}"
+    if systemctl --user is-active --quiet nemotron-stt 2>/dev/null || pgrep -f "nemotron_stt_server.py" >/dev/null 2>&1; then
+        if [[ -S "$sock" ]]; then
+            echo "✅ Nemotron STT server is running (socket: $sock)"
+        else
+            echo "⏳ Nemotron service is up but its socket ($sock) isn't ready yet"
+        fi
     else
-        echo "❌ Nemotron STT server socket missing: /tmp/stt_server.sock"
+        echo "❌ Nemotron STT server is not running"
         echo "   Start it with: systemctl --user start nemotron-stt"
     fi
 
@@ -713,7 +737,7 @@ kill_background_service() {
 
 manage_configuration() {
     show_subtitle "Configuration Management"
-    show_info "Manage your speech-to-text preferences including sound vs notifications, text cleaning, and model settings."
+    show_info "Manage your speech-to-text preferences including sound vs notifications and text cleaning."
 
     if gum confirm "Open configuration management menu?"; then
         # Load current configuration and open the interactive menu

@@ -23,7 +23,7 @@ import re
 
 OUTPUT_FILE = "/tmp/speech_to_text_output.txt"
 TYPE_SUCCESS_FILE = "/tmp/speech_to_text_typed.ok"
-STT_SERVER_SOCKET = "/tmp/stt_server.sock"
+STT_SERVER_SOCKET = os.environ.get("STT_SOCKET", "/tmp/stt_server.sock")
 
 # Text cleaning configuration
 STT_CLEAN_TEXT = os.environ.get("STT_CLEAN_TEXT", "1").lower() in ("1", "true", "yes")
@@ -330,7 +330,9 @@ def transcribe_audio(audio, audio_file: str = None):
     if server_result is not None:
         return server_result
 
-    logging.error(f"Nemotron STT server unavailable at {STT_SERVER_SOCKET} — no fallback")
+    # _try_server_transcription already logged the specific reason (unreachable, or an
+    # error response). No fallback: fail loudly.
+    logging.error(f"Nemotron STT transcription failed via {STT_SERVER_SOCKET} — no fallback")
     sys.exit(1)
 
 def _type_with_wtype(text: str) -> bool:

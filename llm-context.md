@@ -17,7 +17,7 @@
    - **Legacy Hotkey**: Press and hold **F16** (often remapped from a mouse button).
 2. **Input Detection**: The system listens on **all connected keyboards** simultaneously, ensuring robust detection regardless of remapping tools.
 3. **Audio Processing**: System records audio using `pw-record` (PipeWire) or `arecord` (ALSA).
-4. **⚡ Instant Transcription**: Audio is sent to the **persistent STT server** which keeps the model in memory (~0.4s instead of ~2.6s).
+4. **⚡ Instant Transcription**: Audio is sent to the **persistent Nemotron STT server** which keeps the model in memory, so transcription is near-instant (no per-call model load).
 5. **Intelligent Text Cleaning**: Transcribed text is automatically cleaned to remove speech artifacts while preserving meaningful content.
 6. **Output Modes**: User can choose between automatic typing or clipboard + notification.
 
@@ -51,7 +51,7 @@
 - **Input Remapper Config**: `~/.config/input-remapper/presets/ctrl-alt-f12-to-f16.json`
 - **STT Server Socket**: `/tmp/stt_server.sock`
 - **Audio File**: `/tmp/recorded_audio.wav`
-- **Log Files**: `log/key_listener.log`, `log/speech_to_text.log`, `log/stt_server.log`
+- **Log Files**: `log/key_listener.log`, `log/speech_to_text.log`; server logs via `journalctl --user -u nemotron-stt`
 - **Output File**: `/tmp/speech_to_text_output.txt`
 - **Python Venv**: `venv/bin/python3`
 - **Model**: NVIDIA Nemotron 3.5 ASR (~2.5GB in cache)

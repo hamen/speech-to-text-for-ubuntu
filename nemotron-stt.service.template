@@ -1,6 +1,5 @@
 [Unit]
-Description=Nemotron 3.5 ASR STT server (drop-in per Parakeet, stesso socket)
-# NON abilitare insieme a parakeet-stt.service: usano lo stesso socket.
+Description=Nemotron 3.5 ASR STT server
 After=default.target
 
 [Service]
