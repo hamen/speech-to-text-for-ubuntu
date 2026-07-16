@@ -34,6 +34,23 @@ STT_FIX_PUNCTUATION = os.environ.get("STT_FIX_PUNCTUATION", "1").lower() in ("1"
 STT_AGGRESSIVE_CLEANING = os.environ.get("STT_AGGRESSIVE_CLEANING", "0").lower() in ("1", "true", "yes")
 STT_PRESERVE_COMMON_WORDS = os.environ.get("STT_PRESERVE_COMMON_WORDS", "1").lower() in ("1", "true", "yes")
 
+# Optional LLM polish pass (opt-in, off by default) — see README.
+# When enabled, the regex-cleaned transcript is sent to a local llama-server for a
+# second cleanup (dedup, punctuation, number/version/amount/email formatting).
+# Any failure falls back to the regex-cleaned text, so a dictation is never lost.
+STT_LLM_POLISH = os.environ.get("STT_LLM_POLISH", "0").lower() in ("1", "true", "yes")
+STT_LLM_POLISH_URL = os.environ.get("STT_LLM_POLISH_URL", "http://127.0.0.1:8899/v1/chat/completions")
+STT_LLM_POLISH_MODEL = os.environ.get("STT_LLM_POLISH_MODEL", "qwen2.5-1.5b-instruct")
+# Skip polish for very long transcripts so we don't overflow the server context window
+# (which would truncate / garble the output). Falls back to the regex-cleaned text.
+# Parsed defensively so a bad value can't crash import even when polish is disabled.
+try:
+    STT_LLM_POLISH_MAX_CHARS = int(os.environ.get("STT_LLM_POLISH_MAX_CHARS", "2000"))
+    if STT_LLM_POLISH_MAX_CHARS <= 0:
+        STT_LLM_POLISH_MAX_CHARS = 2000
+except (TypeError, ValueError):
+    STT_LLM_POLISH_MAX_CHARS = 2000
+
 # Sound notification configuration
 STT_USE_SOUND = os.environ.get("STT_USE_SOUND", "1").lower() in ("1", "true", "yes")
 STT_SOUND_FILE = os.environ.get("STT_SOUND_FILE", "/usr/share/sounds/freedesktop/stereo/complete.oga")
@@ -630,6 +647,158 @@ def _notify_user(title: str, message: str) -> None:
     if STT_USE_NOTIFICATION:
         _notify(title, message)
 
+STT_LLM_POLISH_PROMPT = (
+    "Sei un correttore di trascrizioni vocali in italiano. Il tuo UNICO compito è ripulire, MAI riscrivere.\n"
+    "Regole:\n"
+    "1. Correggi maiuscole, accenti e punteggiatura.\n"
+    "2. Rimuovi SOLO i filler senza significato: ehm, uh, ecco, cioè, tipo, \"no?\" a fine frase.\n"
+    "3. Se chi parla ripete la stessa frase o la ricomincia, tienila UNA volta sola.\n"
+    "4. Percentuali in cifre: \"dieci per cento\" -> 10%.\n"
+    "5. Versioni in cifre col punto: \"quattro punto otto\" -> 4.8.\n"
+    "6. Importi in cifre: \"venti euro\" -> 20 euro.\n"
+    "7. Email in formato email: \"chiocciola\" -> @, \"punto\" -> ., minuscolo, senza spazi, "
+    "nome attaccato alla @. \"luca chiocciola example punto com\" -> luca@example.com\n"
+    "FEDELTÀ (prioritaria): non aggiungere parole (niente \"un\", \"quindi\", \"e\"), non riformulare, "
+    "non cambiare l'ordine delle parole, non inventare né cambiare numeri o nomi. "
+    "Se è già pulita, restituiscila IDENTICA.\n"
+    "Rispondi SOLO con la trascrizione ripulita, nient'altro.\n\n"
+    "Esempio 1\n"
+    "In: allora il punto è questo il punto è questo come lo mettiamo ehm nel flow\n"
+    "Out: Allora, il punto è questo: come lo mettiamo nel flow?\n"
+    "Esempio 2\n"
+    "In: la versione è quattro punto otto scrivi a ivan chiocciola morgillo punto com\n"
+    "Out: La versione è 4.8. Scrivi a ivan@morgillo.com.\n"
+    "Esempio 3\n"
+    "In: fai venti per cento di sconto su tutto e mandami venti euro\n"
+    "Out: Fai 20% di sconto su tutto e mandami 20 euro."
+)
+
+
+def _polish_words(text: str) -> list:
+    """Alphabetic tokens, lowercased and diacritic-folded, for the fidelity guard.
+
+    Folding diacritics means an accent fix (e.g. ``venerdi`` -> ``venerdì``) is treated
+    as the same word and therefore allowed, while a genuinely new word is not.
+    """
+    import unicodedata
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+    )
+    words, cur = [], []
+    for ch in folded.lower():
+        if ch.isalpha():
+            cur.append(ch)
+        elif cur:
+            words.append("".join(cur))
+            cur = []
+    if cur:
+        words.append("".join(cur))
+    return words
+
+
+def sanitize_polished(original: str, polished) -> str | None:
+    """Fidelity guard for LLM-polished text.
+
+    Returns the accepted (label-stripped) polished string, or ``None`` to fall back to
+    the regex-cleaned text. The guard permits case/punctuation/accent fixes, dedup,
+    filler removal, and number/version/amount/email normalization, but rejects any
+    output that introduces or duplicates a word not present in the original (which also
+    catches refusal/echo boilerplate) or that grows suspiciously long.
+    """
+    from collections import Counter
+    if not original or not polished:
+        return None
+    text = polished.strip()
+    # Strip only a leaked leading label (anchored at start); do NOT strip general quotes.
+    text = re.sub(r"^\s*(?:out|output|trascrizione)\s*:\s*", "", text, flags=re.IGNORECASE).strip()
+    if not text:
+        return None
+    # Runaway / added-paragraph catch: additions are the dangerous direction. We do NOT
+    # add a lower length floor: aggressive dedup and number-only conversions (e.g.
+    # "quattro punto otto" -> "4.8") legitimately shrink the text a lot, so a floor would
+    # false-reject the core feature. Truncation is instead guarded upstream by
+    # STT_LLM_POLISH_MAX_CHARS (input cap) and the finish_reason=="length" check.
+    if len(text) > len(original) * 1.5:
+        logging.warning("LLM polish rejected: output too long vs input")
+        return None
+    # "No new words" as multiset containment (accent/case folded).
+    orig_counts = Counter(_polish_words(original))
+    for word, n in Counter(_polish_words(text)).items():
+        if n > orig_counts.get(word, 0):
+            logging.warning(f"LLM polish rejected: introduces/duplicates word '{word}'")
+            return None
+    return text
+
+
+def polish_with_llm(text: str) -> str | None:
+    """Send the regex-cleaned transcript to a local llama-server for a cleanup pass.
+
+    Returns the cleaned string, or ``None`` on ANY operational failure (timeout, hung or
+    unreachable server, non-2xx, malformed/empty response) so the caller falls back to
+    the regex-cleaned text. Uses only the standard library — no new dependency.
+    """
+    import json
+    import urllib.request
+    import urllib.error
+    # Skip very long transcripts: they can overflow the server context window and come
+    # back truncated/garbled. Falling back to the regex text is safer than a bad polish.
+    if len(text) > STT_LLM_POLISH_MAX_CHARS:
+        logging.info(f"LLM polish skipped: input too long ({len(text)} > {STT_LLM_POLISH_MAX_CHARS} chars)")
+        return None
+    try:
+        timeout = float(os.environ.get("STT_LLM_POLISH_TIMEOUT", "2.0"))
+        if timeout <= 0:
+            timeout = 2.0
+    except (TypeError, ValueError):
+        timeout = 2.0
+    try:
+        max_tokens = int(os.environ.get("STT_LLM_POLISH_MAX_TOKENS", "512"))
+        if max_tokens <= 0:
+            max_tokens = 512
+    except (TypeError, ValueError):
+        max_tokens = 512
+    payload = json.dumps({
+        "model": STT_LLM_POLISH_MODEL,
+        "messages": [
+            {"role": "system", "content": STT_LLM_POLISH_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        STT_LLM_POLISH_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(1_000_000)  # cap response size
+        data = json.loads(raw.decode("utf-8"))
+        choices = data.get("choices") or []
+        if not choices:
+            logging.warning("LLM polish: no choices in response")
+            return None
+        # A truncated response ("length") can be shorter than the input and would sneak
+        # past the fidelity guard (fewer words), silently dropping the tail. Reject it.
+        if choices[0].get("finish_reason") == "length":
+            logging.warning("LLM polish: response truncated (finish_reason=length) — discarding")
+            return None
+        content = choices[0].get("message", {}).get("content")
+        if not isinstance(content, str) or not content.strip():
+            logging.warning("LLM polish: empty or non-string content")
+            return None
+        logging.info("LLM polish: received response")
+        return content.strip()
+    except urllib.error.HTTPError as e:
+        logging.warning(f"LLM polish HTTP error: {e.code}")
+        return None
+    except Exception as e:
+        logging.warning(f"LLM polish request failed: {e}")
+        return None
+
+
 def write_output_file(text: str, path: str = OUTPUT_FILE) -> None:
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -672,6 +841,16 @@ def main():
     else:
         cleaned_text = full_text
         logging.info("Text cleaning disabled, using original transcription")
+
+    # Optional LLM polish pass (opt-in). On any failure, keep the regex-cleaned text.
+    if STT_LLM_POLISH:
+        raw_polish = polish_with_llm(cleaned_text)
+        polished = sanitize_polished(cleaned_text, raw_polish) if raw_polish else None
+        if polished:
+            cleaned_text = polished
+            logging.info("LLM polish applied")
+        else:
+            logging.info("LLM polish skipped/failed, using regex-cleaned text")
 
     # Always write to output file for downstream consumers (e.g., root ydotool typer)
     write_output_file(cleaned_text)

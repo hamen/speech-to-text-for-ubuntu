@@ -17,6 +17,8 @@ DEFAULT_CONFIG=(
     "STT_PRESERVE_COMMON_WORDS=1"
     "STT_MODE=clipboard"
     "STT_ENABLE_DOUBLE_SUPER=0"
+    # Optional LLM transcript polish (off by default) — see README for the full var set.
+    "STT_LLM_POLISH=0"
 )
 
 # Colors for output

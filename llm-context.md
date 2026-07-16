@@ -86,6 +86,9 @@ After launching, you can immediately use the **Double-Tap Control** shortcut.
 - `STT_REMOVE_FILLERS` (default: `1`) - Remove filler words.
 - `STT_FIX_REPETITIONS` (default: `1`) - Fix stuttering.
 
+### Optional LLM Polish (off by default)
+- `STT_LLM_POLISH` (default: `0`) - Second cleanup pass via a local llama-server (Qwen2.5-1.5B). See README for the full var set (`STT_LLM_POLISH_URL/MODEL/TIMEOUT/MAX_TOKENS/MAX_CHARS`) and the fidelity caveats. Falls back to the regex-cleaned text on any failure.
+
 ### Output Mode
 - `STT_MODE` (default: `clipboard`) - Choose between `type` (auto-typing) or `clipboard` (manual pasting).
 - `STT_ENABLE_DOUBLE_SUPER` (default: `0`) - Set to `1` to allow the double-Super hotkey.
